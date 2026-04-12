@@ -81,7 +81,7 @@ const ConsultModal = ({ onClose }) => {
       };
 
       try {
-        await axios.post('http://localhost:5000/api/auth/register', {
+        await axios.post('https://legalconnect-api-amkh.onrender.com/api/auth/register', {
           name: clientName,
           phone: clientPhone,
           hiredLawyer: hiredLawyerData
