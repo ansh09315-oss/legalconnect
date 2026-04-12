@@ -129,7 +129,7 @@ const LawyerProfileModal = ({ lawyer, onClose }) => {
       
       // Post registration data directly to the SQLite backend over API
       try {
-        await axios.post('https://legalconnect-api-amkh.onrender.com/api/auth/register', {
+        await axios.post('https://legalconnect-api-k7qg.onrender.com/api/auth/register', {
           name: clientName,
           phone: clientPhone,
           hiredLawyer: lawyer

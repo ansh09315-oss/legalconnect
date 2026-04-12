@@ -19,7 +19,7 @@ const Login = () => {
 
     try {
       // 1. Try Live Database Authentication first
-      const response = await axios.post('https://legalconnect-api-amkh.onrender.com/api/auth/login', {
+      const response = await axios.post('https://legalconnect-api-k7qg.onrender.com/api/auth/login', {
         name: username.trim(),
         phone: password.trim()
       });
