@@ -18,8 +18,8 @@ const Login = () => {
     setError('');
 
     try {
-      // 1. Try Live Database Authentication first
-      const response = await axios.post('https://legalconnect-api-k7qg.onrender.com/api/auth/login', {
+      // 1. Try Live Database Authentication first (MongoDB via Netlify Serverless)
+      const response = await axios.post('/.netlify/functions/api/auth/login', {
         name: username.trim(),
         phone: password.trim()
       });

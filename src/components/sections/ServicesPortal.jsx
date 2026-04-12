@@ -127,9 +127,9 @@ const LawyerProfileModal = ({ lawyer, onClose }) => {
     try {
       await fetch("https://api.web3forms.com/submit", { method: "POST", body: formData });
       
-      // Post registration data directly to the SQLite backend over API
+      // Post registration data directly to the MongoDB backend over Netlify Serverless Function
       try {
-        await axios.post('https://legalconnect-api-k7qg.onrender.com/api/auth/register', {
+        await axios.post('/.netlify/functions/api/auth/register', {
           name: clientName,
           phone: clientPhone,
           hiredLawyer: lawyer
