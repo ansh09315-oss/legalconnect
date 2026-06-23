@@ -8,38 +8,37 @@ import CaseTimeline from './sections/CaseTimeline';
 import AdvoTalkCTA from './sections/AdvoTalkCTA';
 import ModernFooter from './sections/ModernFooter';
 import LegalNavbar from './LegalNavbar';
+import { useAuth } from '../contexts/AuthContext';
 
 const LegalConnectHome = () => {
   const [loaded, setLoaded] = useState(false);
   const navigate = useNavigate();
+  const { isAuthenticated, user, isAdmin } = useAuth();
 
   useEffect(() => {
-    // If securely logged in, instantly bypass the showcase and drop into the dashboard
-    if (localStorage.getItem('isAuthenticated') === 'true') {
-      navigate('/client-dashboard');
+    if (isAuthenticated) {
+      if (isAdmin) {
+        navigate('/admin');
+      } else if (user?.role === 'lawyer') {
+        navigate('/lawyer');
+      } else if (user?.cases && user.cases.length > 0) {
+        navigate('/client-dashboard');
+      }
     }
-  }, [navigate]);
+  }, [isAuthenticated, user, isAdmin, navigate]);
 
   const handleLoadComplete = useCallback(() => setLoaded(true), []);
 
   return (
     <>
-      <AnimatePresence>
-        {!loaded && <LoadingScreen onComplete={handleLoadComplete} />}
-      </AnimatePresence>
-
-      {loaded && (
-        <>
-          <LegalNavbar />
-          <main>
-            <HeroSection />
-            <ServicesPortal />
-            <CaseTimeline />
-            <AdvoTalkCTA />
-          </main>
-          <ModernFooter />
-        </>
-      )}
+      <LegalNavbar />
+      <main>
+        <HeroSection />
+        <ServicesPortal />
+        <CaseTimeline />
+        <AdvoTalkCTA />
+      </main>
+      <ModernFooter />
     </>
   );
 };

@@ -82,7 +82,7 @@ const HeroSection = () => {
 
       <div className="relative z-10 text-center flex flex-col items-center pointer-events-none">
         <motion.div
-          className="flex overflow-hidden mb-4"
+          className="flex flex-wrap justify-center overflow-hidden mb-4 px-4"
           variants={container}
           initial="hidden"
           animate="visible"
@@ -91,7 +91,7 @@ const HeroSection = () => {
             <motion.span
               key={index}
               variants={child}
-              className="text-6xl md:text-8xl font-display font-bold text-white glow-text"
+              className="text-5xl md:text-8xl font-display font-bold text-white glow-text"
             >
               {letter === " " ? "\u00A0" : letter}
             </motion.span>
@@ -108,6 +108,9 @@ const HeroSection = () => {
         </motion.p>
 
         <motion.button
+          onClick={() => {
+            document.getElementById('services')?.scrollIntoView({ behavior: 'smooth' });
+          }}
           initial={{ opacity: 0, scale: 0.9 }}
           animate={{ opacity: 1, scale: 1 }}
           transition={{ delay: 2, duration: 0.5 }}

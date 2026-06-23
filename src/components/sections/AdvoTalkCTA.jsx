@@ -5,6 +5,7 @@ import { Canvas, useFrame } from '@react-three/fiber';
 import { Float } from '@react-three/drei';
 import { MessageCircle, Clock, Wallet, Handshake, ArrowRight, X, Mic, Send, CheckCircle2, Lock } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../../contexts/AuthContext';
 
 function ConsultBubble() {
   const groupRef = useRef();
@@ -39,6 +40,11 @@ const features = [
   { icon: Wallet, label: 'Transparent Pricing', color: '#34d399' },
 ];
 
+const SECTORS = [
+  "Corporate Law", "Criminal Defense", "Family & Divorce", 
+  "Property & Real Estate", "Cyber Law", "General Consultation"
+];
+
 const mockSlots = [
   { time: 'Today, 3:00 PM', name: 'Adarsh Trivedi', email: 'trivediadarsh13@gmail.com' },
   { time: 'Today, 5:30 PM', name: 'Pallavi Singh', email: 'thakurpallavi33@gmail.com' },
@@ -48,54 +54,82 @@ const mockSlots = [
 
 const ConsultModal = ({ onClose }) => {
   const navigate = useNavigate();
-  // Step 1: Select slot, Step 2: Form, Step 3: Payment
+  const { isAuthenticated, user } = useAuth();
   const [step, setStep] = useState(1);
   const [selectedSlot, setSelectedSlot] = useState(null);
-  
+  const [selectedSector, setSelectedSector] = useState(SECTORS[0]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [paymentProcessing, setPaymentProcessing] = useState(false);
+
+  const handleSlotSelect = (slot) => {
+    if (isAuthenticated && user) {
+      setSelectedSlot(slot);
+      setStep(2);
+    } else {
+      sessionStorage.setItem('authIntent', 'advotalk');
+      navigate('/login?redirect=advotalk');
+    }
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setIsSubmitting(true);
     
+    // Retrieve authenticated client data
+    const clientDataStr = localStorage.getItem('clientAccount');
+    let clientData = null;
+    if (clientDataStr) {
+      clientData = JSON.parse(clientDataStr);
+    }
+    
+    const clientName = clientData?.name || 'Anonymous Client';
+    const clientPhone = clientData?.phone || '0000000000';
+    
     const formData = new FormData(e.target);
-    const clientName = formData.get('name');
-    const clientPhone = formData.get('phone');
+    const clientMessage = formData.get('message');
 
-    formData.append("access_key", "60958c5b-9e33-4168-8cd8-4b276f2203f5");
-    formData.append("subject", `New Consultation Request for ${selectedSlot.name}`);
-    formData.append("to_email", selectedSlot.email || "support@legalconnect.com");
-    // Explicitly add target contact since some free plans mask raw headers
-    formData.append("Target Advocate Email", selectedSlot.email || "support@legalconnect.com");
+    // Email to lawyer via Web3Forms
+    const emailFormData = new FormData();
+    emailFormData.append("access_key", "60958c5b-9e33-4168-8cd8-4b276f2203f5");
+    emailFormData.append("subject", `New ${selectedSector} Consultation for ${selectedSlot.name}`);
+    emailFormData.append("to_email", selectedSlot.email || "support@legalconnect.com");
+    emailFormData.append("Target Advocate Email", selectedSlot.email || "support@legalconnect.com");
+    emailFormData.append("Client Name", clientName);
+    emailFormData.append("Client Phone", clientPhone);
+    emailFormData.append("Sector", selectedSector);
+    emailFormData.append("Message", clientMessage);
 
     try {
-      // Execute live submission
-      await fetch("https://api.web3forms.com/submit", { method: "POST", body: formData });
+      await fetch("https://api.web3forms.com/submit", { method: "POST", body: emailFormData });
       
-      const hiredLawyerData = {
+      const newCaseId = `LC-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`;
+
+      const newCase = {
+         case_id: newCaseId,
+         sector: selectedSector,
+         status: 'active',
          name: selectedSlot.name,
-         spec: 'Target Consultant',
+         spec: selectedSector,
          email: selectedSlot.email,
-         court: 'Consultation Services'
+         court: 'Consultation Services',
+         phone: 'Contact via Secure Chat'
       };
 
-      try {
-        await axios.post('/.netlify/functions/api/auth/register', {
-          name: clientName,
-          phone: clientPhone,
-          hiredLawyer: hiredLawyerData
-        });
-      } catch (dbErr) {
-        console.error("SQLite fallback error: ", dbErr);
+      if (clientData) {
+        if (!clientData.cases) clientData.cases = [];
+        clientData.cases.push(newCase);
+        localStorage.setItem('clientAccount', JSON.stringify(clientData));
+        
+        try {
+          // Sync new case to MongoDB via sync-cases endpoint
+          await axios.post('/.netlify/functions/api/auth/sync-cases', {
+            phone: clientData.phone,
+            newCase
+          });
+        } catch (dbErr) {
+          console.warn("MongoDB sync fallback (dev mode): ", dbErr.message);
+        }
       }
-
-      // Save details simulating backend registration for Consultant users
-      localStorage.setItem('clientAccount', JSON.stringify({
-        name: clientName,
-        phone: clientPhone,
-        hiredLawyer: hiredLawyerData
-      }));
       
       setStep(3); // Go to Payment phase
     } catch (error) {
@@ -107,11 +141,8 @@ const ConsultModal = ({ onClose }) => {
 
   const handlePayment = () => {
     setPaymentProcessing(true);
-    // Simulate successful payment routing to client dashboard
     setTimeout(() => {
       onClose();
-      // Ensure local active state engages immediately
-      localStorage.setItem('isAuthenticated', 'true');
       navigate('/client-dashboard');
     }, 2000);
   };
@@ -129,13 +160,13 @@ const ConsultModal = ({ onClose }) => {
         animate={{ scale: 1, y: 0 }}
         exit={{ scale: 0.8, y: 40 }}
         transition={{ type: 'spring', stiffness: 300, damping: 25 }}
-        className="glass-panel p-8 rounded-3xl max-w-lg w-full mx-4 border border-legal-cyan/20 my-auto"
+        className="glass-panel p-5 md:p-8 rounded-3xl max-w-lg w-full mx-4 border border-legal-cyan/20 my-auto"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-legal-cyan/10 border border-legal-cyan/30 flex items-center justify-center">
-              <Mic size={20} className="text-legal-cyan" />
+            <div className="w-10 h-10 rounded-xl bg-white border border-legal-cyan/30 flex items-center justify-center overflow-hidden">
+              <img src="/advotalk-logo.webp" alt="AdvoTalk Logo" className="w-full h-full object-cover" />
             </div>
             <div>
               <h3 className="text-white font-display font-bold text-lg">AdvoTalk</h3>
@@ -162,7 +193,7 @@ const ConsultModal = ({ onClose }) => {
                   <motion.button
                     key={i}
                     whileHover={{ x: 4 }}
-                    onClick={() => { setSelectedSlot(slot); setStep(2); }}
+                    onClick={() => handleSlotSelect(slot)}
                     className="interactive w-full flex items-center justify-between text-left px-5 py-4 rounded-xl bg-white/5 border border-white/10 group hover:border-legal-cyan/40 hover:bg-legal-cyan/5 transition-all"
                   >
                     <div>
@@ -181,15 +212,22 @@ const ConsultModal = ({ onClose }) => {
               <div className="bg-legal-cyan/5 p-4 rounded-xl border border-legal-cyan/20 mb-6">
                 <p className="text-[10px] text-legal-cyan uppercase tracking-widest mb-1">Hiring Consultation For</p>
                 <p className="text-white text-sm font-bold">{selectedSlot?.name || 'Selected Advocate'}</p>
-                <p className="text-slate-400 text-xs mt-1">Priority Intake</p>
+                <p className="text-slate-400 text-xs mt-1">Client data will be pulled securely from your account.</p>
               </div>
 
-              <div className="space-y-3">
-                <input type="text" name="name" placeholder="Your Full Name" required className="w-full px-4 py-3 rounded-xl bg-white/5 border border-white/10 text-white text-sm focus:border-legal-cyan/50 outline-none transition-all" />
-                <div className="grid grid-cols-2 gap-3">
-                  <input type="email" name="email" placeholder="Email Address" required className="w-full px-4 py-3 rounded-xl bg-white/5 border border-white/10 text-white text-sm focus:border-legal-cyan/50 outline-none transition-all" />
-                  <input type="tel" name="phone" placeholder="Phone Number" required className="w-full px-4 py-3 rounded-xl bg-white/5 border border-white/10 text-white text-sm focus:border-legal-cyan/50 outline-none transition-all" />
+              <div className="space-y-4">
+                <div>
+                  <label className="text-xs text-slate-400 uppercase tracking-wider mb-2 block">Case Sector</label>
+                  <select 
+                    value={selectedSector}
+                    onChange={(e) => setSelectedSector(e.target.value)}
+                    className="w-full px-4 py-3 rounded-xl bg-white/5 border border-white/10 text-white text-sm focus:border-legal-cyan/50 outline-none transition-all appearance-none cursor-pointer"
+                    style={{ backgroundImage: 'url("data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22292.4%22%20height%3D%22292.4%22%3E%3Cpath%20fill%3D%22%2300e5ff%22%20d%3D%22M287%2069.4a17.6%2017.6%200%200%200-13-5.4H18.4c-5%200-9.3%201.8-12.9%205.4A17.6%2017.6%200%200%200%200%2082.2c0%205%201.8%209.3%205.4%2012.9l128%20127.9c3.6%203.6%207.8%205.4%2012.8%205.4s9.2-1.8%2012.8-5.4L287%2095c3.5-3.5%205.4-7.8%205.4-12.8%200-5-1.9-9.2-5.5-12.8z%22%2F%3E%3C%2Fsvg%3E")', backgroundRepeat: 'no-repeat', backgroundPosition: 'right 1rem top 50%', backgroundSize: '0.65rem auto' }}
+                  >
+                    {SECTORS.map(sec => <option key={sec} value={sec} style={{background: '#050A14'}}>{sec}</option>)}
+                  </select>
                 </div>
+
                 <textarea name="message" placeholder="Brief Case Description & Query..." rows="4" required className="w-full px-4 py-3 rounded-xl bg-white/5 border border-white/10 text-white text-sm focus:border-legal-cyan/50 outline-none transition-all resize-none"></textarea>
               </div>
 
@@ -261,6 +299,11 @@ const ConsultModal = ({ onClose }) => {
 
 const AdvoTalkCTA = () => {
   const [showModal, setShowModal] = useState(false);
+  const navigate = useNavigate();
+
+  const handleConsultClick = () => {
+    setShowModal(true);
+  };
 
   return (
     <>
@@ -276,12 +319,9 @@ const AdvoTalkCTA = () => {
               className="h-80 md:h-96 rounded-3xl overflow-hidden relative"
             >
               <div className="absolute inset-0 bg-gradient-radial from-legal-cyan/5 to-transparent rounded-3xl" />
-              <Canvas camera={{ position: [0, 0, 5], fov: 50 }}>
-                <ambientLight intensity={0.3} />
-                <pointLight position={[3, 3, 3]} intensity={1.5} color="#00e5ff" />
-                <pointLight position={[-3, -3, -3]} intensity={0.5} color="#818cf8" />
-                <ConsultBubble />
-              </Canvas>
+              <div className="absolute inset-0 flex items-center justify-center p-8">
+                <img src="/advotalk-logo.webp" alt="AdvoTalk Illustration" className="w-full h-full object-contain drop-shadow-2xl opacity-90 hover:scale-105 transition-transform duration-500" />
+              </div>
               {/* Floating label */}
               <motion.div
                 animate={{ y: [0, -8, 0] }}
@@ -290,7 +330,7 @@ const AdvoTalkCTA = () => {
               >
                 <div className="flex items-center gap-3">
                   <div className="relative flex items-center justify-center">
-                    <img src="/advocate-live.png" alt="Advocate Profile" className="w-8 h-8 rounded-full border border-legal-cyan/50 object-cover" />
+                    <img src="/advotalk-logo.webp" alt="Advocate Profile" className="w-8 h-8 rounded-full border border-legal-cyan/50 object-cover" />
                     <div className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-legal-cyan animate-pulse border-2 border-legal-navy" />
                   </div>
                   <span className="text-legal-cyan text-sm font-semibold">Live Now</span>
@@ -306,9 +346,14 @@ const AdvoTalkCTA = () => {
               transition={{ duration: 0.8 }}
             >
               <span className="text-legal-cyan text-sm font-semibold tracking-[0.3em] uppercase">Service 2</span>
-              <h2 className="text-4xl md:text-5xl font-display font-bold text-white mt-2 mb-4">
-                AdvoTalk
-              </h2>
+              <div className="flex items-center gap-4 mt-2 mb-4">
+                <div className="w-14 h-14 rounded-full bg-white flex items-center justify-center overflow-hidden border-2 border-legal-cyan/50">
+                  <img src="/advotalk-logo.webp" alt="AdvoTalk Logo" className="w-full h-full object-cover" />
+                </div>
+                <h2 className="text-4xl md:text-5xl font-display font-bold text-white">
+                  AdvoTalk
+                </h2>
+              </div>
               <p className="text-slate-400 leading-relaxed mb-8">
                 Connect one-on-one with expert legal advocates through live video, voice, or secure text consultations. Transparent pricing, zero bureaucracy.
               </p>
@@ -340,7 +385,7 @@ const AdvoTalkCTA = () => {
               <motion.button
                 whileHover={{ scale: 1.03 }}
                 whileTap={{ scale: 0.97 }}
-                onClick={() => setShowModal(true)}
+                onClick={handleConsultClick}
                 className="interactive flex items-center gap-3 px-8 py-4 rounded-2xl font-semibold text-legal-navy"
                 style={{ background: 'linear-gradient(135deg, #00e5ff 0%, #0094aa 100%)' }}
               >

@@ -26,7 +26,7 @@ html, body {
   color: #f8fafc;
   font-family: "Inter", sans-serif;
   overflow-x: hidden;
-  cursor: none;
+  scroll-behavior: smooth;
 }
 
 h1, h2, h3, h4, h5, h6 {
@@ -61,7 +61,7 @@ h1, h2, h3, h4, h5, h6 {
 .hide-scrollbar::-webkit-scrollbar { display: none; }
 .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 
-a, button, [role="button"], .interactive { cursor: none; }
+a, button, [role="button"], .interactive { cursor: pointer; }
 
 /* ─── Custom Scrollbar ─── */
 ::-webkit-scrollbar { width: 6px; }
@@ -70,3 +70,82 @@ a, button, [role="button"], .interactive { cursor: none; }
 ::-webkit-scrollbar-thumb:hover { background: rgba(0,229,255,0.3); }
 
 canvas { touch-action: none; }
+
+/* ─── Dashboard Layout ─── */
+.dashboard-wrapper {
+  display: grid;
+  grid-template-columns: 320px 1fr;
+  gap: 28px;
+  padding: 28px 40px;
+  max-width: 1400px;
+  margin: 0 auto;
+  min-height: calc(100vh - 80px);
+  align-items: flex-start;
+}
+
+@media (max-width: 1024px) {
+  .dashboard-wrapper {
+    grid-template-columns: 1fr;
+    padding: 20px;
+  }
+}
+
+/* ─── Glass Header ─── */
+.glass-header {
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  z-index: 1000;
+}
+
+/* ─── Premium Dashboard Styles ─── */
+.bento-card {
+  background: rgba(26, 28, 35, 0.4);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+  border-radius: 1.25rem;
+  transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+  overflow: hidden;
+}
+
+.bento-card:hover {
+  border-color: rgba(0, 229, 255, 0.2);
+  box-shadow: 0 12px 40px rgba(0, 229, 255, 0.1), 0 0 20px rgba(0, 229, 255, 0.05);
+  transform: translateY(-2px);
+}
+
+.bento-card-header {
+  font-family: "Outfit", sans-serif;
+  font-size: 1.25rem;
+  font-weight: 600;
+  background: linear-gradient(90deg, #fff, #94a3b8);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  margin-bottom: 1rem;
+}
+
+/* Glassy chat bubble styles */
+.chat-bubble-lawyer {
+  background: linear-gradient(135deg, rgba(0, 229, 255, 0.15), rgba(0, 148, 170, 0.1));
+  border: 1px solid rgba(0, 229, 255, 0.3);
+  box-shadow: 0 4px 15px rgba(0, 229, 255, 0.05);
+  border-radius: 1rem 1rem 0 1rem;
+}
+
+.chat-bubble-client {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 1rem 1rem 1rem 0;
+}
+
+/* Floating animation */
+@keyframes float {
+  0% { transform: translateY(0px); }
+  50% { transform: translateY(-5px); }
+  100% { transform: translateY(0px); }
+}
+
+.animate-float {
+  animation: float 6s ease-in-out infinite;
+}

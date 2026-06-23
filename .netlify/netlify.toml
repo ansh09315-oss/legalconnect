@@ -5,6 +5,7 @@ plugins = []
 headers = []
 
 [build]
+edge_functions = "C:\\Users\\ansh0\\legal connect\\netlify\\edge-functions"
 publish = "C:\\Users\\ansh0\\legal connect\\dist"
 publishOrigin = "config"
 commandOrigin = "config"
@@ -25,22 +26,13 @@ functions = "C:\\Users\\ansh0\\legal connect\\netlify\\functions"
 
 [build.services]
 
+[[edge_functions]]
+path = "/api/contact-lawyer"
+function = "send-email"
+
 [functions]
 
 [functions."*"]
-node_bundler = "esbuild"
-
-[[redirects]]
-from = "/api/*"
-to = "/.netlify/functions/api/:splat"
-status = 200.0
-force = false
-
-[redirects.query]
-
-[redirects.conditions]
-
-[redirects.headers]
 
 [[redirects]]
 from = "/*"

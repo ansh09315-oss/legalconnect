@@ -5,6 +5,8 @@ import { Canvas, useFrame } from '@react-three/fiber';
 import { Float } from '@react-three/drei';
 import { Scale, Building2, Briefcase, User, Star, ArrowRight, ChevronLeft, X, Mail, Phone, MapPin, Award, CheckCircle2, Lock, Send } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { supabase } from '../../lib/supabaseClient';
+import { useAuth } from '../../contexts/AuthContext';
 
 const caseTypes = [
   {
@@ -41,109 +43,99 @@ const caseTypes = [
   },
 ];
 
-const lawyers = [
-  { 
-    id: 0, 
-    name: 'Adarsh Trivedi', 
-    spec: 'Litigation & Dispute Resolution', 
-    areas: ['Criminal', 'Civil', 'RERA', 'Medical Negligence'],
-    rating: 4.9, 
-    email: 'trivediadarsh13@gmail.com',
-    phone: '7052099743',
-    address: '2nd Floor, Shri Ram Paras Tower Semra, Matiyari, Lucknow - 226028',
-    court: 'High Court at Allahabad & Lucknow Bench'
-  },
-  { 
-    id: 1, 
-    name: 'Pallavi Singh', 
-    spec: 'High Court Advocate', 
-    areas: ['Criminal', 'Civil', 'Corporate'],
-    rating: 4.8, 
-    email: 'thakurpallavi33@gmail.com',
-    phone: '7007590774',
-    address: 'Sector-C, Jankipuram, Lucknow - 226024',
-    court: 'High Court Lucknow',
-    chamber: 'AGA Block-B/329'
-  },
-  { 
-    id: 2, 
-    name: 'Pinki Devi', 
-    spec: 'Civil & Family Law', 
-    areas: ['Civil', 'Family'],
-    rating: 4.7, 
-    phone: '8052962256',
-    barNo: 'UP 7505/2022',
-    address: 'B 26 Kanchanpur Matiyari Chinhat, Lucknow - 226028',
-    court: 'High Court Lucknow'
-  },
-  { 
-    id: 3, 
-    name: 'Sarvesh Kumar', 
-    spec: 'Corporate & Arbitration', 
-    areas: ['Corporate', 'Litigation'],
-    rating: 4.9, 
-    phone: '8887500696',
-    barNo: 'UP 10989/22',
-    address: 'Vill-Lakshvar Vajaha, Safdarganj, Barabanki',
-    court: 'High Court Lucknow',
-    aorNo: 'B/S 3343/2024'
-  },
-  { 
-    id: 4, 
-    name: 'Anshika Singh', 
-    spec: 'Cases & Consultations', 
-    areas: ['Corporate', 'Litigation'],
-    rating: 4.9, 
-    email: 't0289245@gmail.com',
-    phone: '9506725746',
-    address: 'Lucknow',
-    court: 'High Court Lucknow'
-  },
-];
+// Lawyers are now fetched dynamically from the mockDatabase.
 
 const LawyerProfileModal = ({ lawyer, onClose }) => {
   const navigate = useNavigate();
+  const { isAuthenticated, user } = useAuth();
   const [step, setStep] = useState('profile');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [paymentProcessing, setPaymentProcessing] = useState(false);
 
   if (!lawyer) return null;
 
+  const handleHireClick = () => {
+    if (isAuthenticated && user) {
+      setStep('form');
+    } else {
+      sessionStorage.setItem('authIntent', 'services');
+      navigate('/login?redirect=services');
+    }
+  };
+
   const handleSubmitCase = async (e) => {
     e.preventDefault();
     setIsSubmitting(true);
     
-    // Simulate Web3Forms Submission for hiring for a case
+    const clientDataStr = localStorage.getItem('clientAccount');
+    let clientData = null;
+    if (clientDataStr) {
+      clientData = JSON.parse(clientDataStr);
+    }
+    
+    const clientName = clientData?.name || 'Anonymous Client';
+    const clientPhone = clientData?.phone || '0000000000';
+    const clientEmail = clientData?.email || 'test@example.com';
+    
     const formData = new FormData(e.target);
-    const clientName = formData.get('name');
-    const clientPhone = formData.get('phone');
-
-    formData.append("access_key", "60958c5b-9e33-4168-8cd8-4b276f2203f5");
-    formData.append("subject", `New Case File for ${lawyer.name}`);
-    formData.append("to_email", lawyer.email || "support@legalconnect.com");
-    // Ensure the advocate's email also actively appears in the body of the email in case raw routing doesn't trigger
-    formData.append("Target Advocate Email", lawyer.email || "support@legalconnect.com");
+    const caseDetails = formData.get('caseDetails');
 
     try {
-      await fetch("https://api.web3forms.com/submit", { method: "POST", body: formData });
-      
-      // Post registration data directly to the MongoDB backend over Netlify Serverless Function
-      try {
-        await axios.post('/.netlify/functions/api/auth/register', {
+      // 1. Send direct-to-lawyer email via Netlify Edge Function
+      await fetch('/api/contact-lawyer', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
           name: clientName,
           phone: clientPhone,
-          hiredLawyer: lawyer
-        });
+          email: clientEmail,
+          caseDetails: caseDetails,
+          lawyerEmail: lawyer.email || 'support@legalconnect.com',
+          lawyerName: lawyer.name
+        })
+      });
+      
+      // 2. Save case details to Supabase (Mocking lawyer_id and client_id since we don't have full auth yet)
+      const { supabase } = await import('../../lib/supabaseClient');
+      try {
+        await supabase.from('cases').insert([{
+          lawyer_id: lawyer.id,
+          client_name: clientName,
+          client_phone: clientPhone,
+          status: 'pending'
+        }]);
       } catch (dbErr) {
-        console.error("SQLite DB Error fallback: ", dbErr);
+        console.error("Supabase write failed:", dbErr);
       }
 
-      // Save details simulating frontend session state caching
-      localStorage.setItem('clientAccount', JSON.stringify({
-        name: clientName,
-        phone: clientPhone,
-        hiredLawyer: lawyer
-      }));
+      const newCaseId = `LC-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`;
+      
+      const newCase = {
+         case_id: newCaseId,
+         sector: lawyer.spec || 'General Consultation',
+         status: 'active',
+         name: lawyer.name,
+         spec: lawyer.spec,
+         email: lawyer.email,
+         court: lawyer.court,
+         phone: lawyer.phone
+      };
+
+      if (clientData) {
+        if (!clientData.cases) clientData.cases = [];
+        clientData.cases.push(newCase);
+        localStorage.setItem('clientAccount', JSON.stringify(clientData));
+        
+        // Sync new case to MongoDB backend
+        try {
+          await axios.post('/.netlify/functions/api/auth/sync-cases', {
+            phone: clientData.phone,
+            newCase
+          });
+        } catch (syncErr) {
+          console.warn('Could not sync case to DB (dev mode):', syncErr.message);
+        }
+      }
       setStep('payment');
     } catch (error) {
       console.error(error);
@@ -156,7 +148,6 @@ const LawyerProfileModal = ({ lawyer, onClose }) => {
     setPaymentProcessing(true);
     setTimeout(() => {
       onClose();
-      localStorage.setItem('isAuthenticated', 'true');
       navigate('/client-dashboard');
     }, 2000);
   };
@@ -255,7 +246,7 @@ const LawyerProfileModal = ({ lawyer, onClose }) => {
                       whileTap={{ scale: 0.98 }}
                       className="interactive w-full py-4 rounded-2xl font-bold text-legal-navy shadow-lg shadow-legal-cyan/20"
                       style={{ background: 'linear-gradient(135deg, #00e5ff 0%, #0094aa 100%)' }}
-                      onClick={() => setStep('form')}
+                      onClick={handleHireClick}
                     >
                       Hire Advocate Now
                     </motion.button>
@@ -270,11 +261,6 @@ const LawyerProfileModal = ({ lawyer, onClose }) => {
                 <p className="text-slate-400 text-sm mb-6">Provide details for {lawyer.name} to officially take up your case.</p>
                 
                 <div className="space-y-4">
-                  <input type="text" name="name" placeholder="Your Full Name" required className="w-full px-4 py-3 rounded-xl bg-white/5 border border-white/10 text-white text-sm focus:border-legal-cyan/50 outline-none transition-all" />
-                  <div className="grid grid-cols-2 gap-3">
-                    <input type="email" name="email" placeholder="Email Address" required className="w-full px-4 py-3 rounded-xl bg-white/5 border border-white/10 text-white text-sm focus:border-legal-cyan/50 outline-none transition-all" />
-                    <input type="tel" name="phone" placeholder="Phone Number" required className="w-full px-4 py-3 rounded-xl bg-white/5 border border-white/10 text-white text-sm focus:border-legal-cyan/50 outline-none transition-all" />
-                  </div>
                   <textarea name="caseDetails" placeholder="Detailed Case Brief..." rows="4" required className="w-full px-4 py-3 rounded-xl bg-white/5 border border-white/10 text-white text-sm focus:border-legal-cyan/50 outline-none transition-all resize-none"></textarea>
                 </div>
 
@@ -338,8 +324,8 @@ const LawyerProfileModal = ({ lawyer, onClose }) => {
   );
 };
 
-function LawyerOrb({ lawyer, index, onClick }) {
-  const angle = (index / (lawyers.length || 1)) * Math.PI * 2;
+function LawyerOrb({ lawyer, index, total, onClick }) {
+  const angle = (index / (total || 1)) * Math.PI * 2;
   const radius = 3;
   const x = Math.cos(angle) * radius;
   const z = Math.sin(angle) * radius;
@@ -367,7 +353,7 @@ function LawyerOrb({ lawyer, index, onClick }) {
   );
 }
 
-function LawyerGalaxy({ onSelect }) {
+function LawyerGalaxy({ onSelect, lawyersList }) {
   const groupRef = useRef();
   useFrame((state) => {
     if (groupRef.current) {
@@ -376,8 +362,8 @@ function LawyerGalaxy({ onSelect }) {
   });
   return (
     <group ref={groupRef}>
-      {lawyers.map((lawyer, i) => (
-        <LawyerOrb key={lawyer.id} lawyer={lawyer} index={i} onClick={() => onSelect(lawyer)} />
+      {lawyersList.map((lawyer, i) => (
+        <LawyerOrb key={lawyer.id} lawyer={lawyer} index={i} total={lawyersList.length} onClick={() => onSelect(lawyer)} />
       ))}
       <mesh>
         <sphereGeometry args={[0.3, 16, 16]} />
@@ -394,7 +380,7 @@ const ServiceCard = ({ caseType, onClick }) => {
       onClick={() => onClick(caseType)}
       whileHover={{ scale: 1.05 }}
       transition={{ type: 'spring', stiffness: 300 }}
-      className="interactive flex-shrink-0 w-72 md:w-80 glass-card p-6 rounded-2xl cursor-pointer group"
+      className="interactive flex-shrink-0 w-full glass-card p-6 rounded-2xl cursor-pointer group"
       style={{
         boxShadow: `0 0 0 0 ${caseType.color}33`,
       }}
@@ -424,11 +410,29 @@ const ServiceCard = ({ caseType, onClick }) => {
 
 const ServicesPortal = () => {
   const sectionRef = useRef();
+  const navigate = useNavigate();
   const [selectedCategory, setSelectedCategory] = useState(null);
   const [selectedLawyer, setSelectedLawyer] = useState(null);
+  const [lawyersList, setLawyersList] = useState([]);
   
   const { scrollYProgress } = useScroll({ target: sectionRef, offset: ['start end', 'end start'] });
   const xOffset = useTransform(scrollYProgress, [0, 1], ['10%', '-10%']);
+
+  // Allow browsing categories without login
+  const handleCategoryClick = (caseType) => {
+    setSelectedCategory(caseType);
+  };
+
+  React.useEffect(() => {
+    const fetchLawyers = async () => {
+      const { data } = await supabase
+        .from('lawyers')
+        .select('*')
+        .eq('status', 'approved');
+      if (data) setLawyersList(data);
+    };
+    fetchLawyers();
+  }, [selectedCategory]); // Refetch when a user opens a category to see latest approved lawyers
 
   return (
     <section ref={sectionRef} id="services" className="py-24 bg-legal-navy overflow-hidden">
@@ -460,11 +464,10 @@ const ServicesPortal = () => {
             transition={{ duration: 0.4 }}
           >
             <motion.div
-              style={{ x: xOffset }}
-              className="flex gap-6 px-6 md:px-12 pb-4 hide-scrollbar overflow-x-auto"
+              className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 px-6 md:px-12 pb-4 w-full"
             >
               {caseTypes.map((ct) => (
-                <ServiceCard key={ct.id} caseType={ct} onClick={setSelectedCategory} />
+                <ServiceCard key={ct.id} caseType={ct} onClick={handleCategoryClick} />
               ))}
             </motion.div>
           </motion.div>
@@ -489,14 +492,14 @@ const ServicesPortal = () => {
                   <Canvas camera={{ position: [0, 2, 8], fov: 50 }}>
                     <ambientLight intensity={0.4} />
                     <pointLight position={[0, 0, 0]} intensity={1} color="#00e5ff" />
-                    <LawyerGalaxy onSelect={setSelectedLawyer} />
+                    <LawyerGalaxy onSelect={setSelectedLawyer} lawyersList={lawyersList} />
                   </Canvas>
                   <div className="absolute top-4 left-4 bg-black/40 backdrop-blur-md px-3 py-1.5 rounded-lg border border-white/10 text-[10px] text-slate-400 uppercase tracking-widest pointer-events-none">
                     Select an orb to view profile
                   </div>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  {lawyers.map((lawyer, i) => (
+                  {lawyersList.map((lawyer, i) => (
                     <motion.div
                       key={lawyer.id}
                       initial={{ opacity: 0, y: 20 }}
