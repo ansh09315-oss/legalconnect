@@ -152,7 +152,187 @@ app.post('/api/auth/login', async (req, res) => {
   }
 });
 
-// Supabase Login Route for Lawyers and Clients
+// ── Dedicated Advocate Login Route ──
+// Strictly queries lawyer_profiles (with fallback to legacy 'lawyers' table)
+const advocateLoginHandler = async (req, res) => {
+  try {
+    const { identifier, password } = req.body;
+    if (!identifier || !password) {
+      return res.status(400).json({ error: 'Email/phone and password are required.' });
+    }
+    if (!supabase) return res.status(500).json({ error: 'Database not configured.' });
+
+    const id = identifier.trim().toLowerCase();
+
+    // Query new lawyer_profiles table first, fallback to legacy lawyers table
+    let users = [];
+    const { data: newRows } = await supabase
+      .from('lawyer_profiles')
+      .select('*')
+      .or(`email.eq.${id},phone.eq.${identifier.trim()}`);
+    if (newRows?.length) users = newRows;
+
+    if (!users.length) {
+      const { data: legacyRows } = await supabase
+        .from('lawyers')
+        .select('*')
+        .or(`email.eq.${id},phone.eq.${identifier.trim()}`);
+      if (legacyRows?.length) users = legacyRows;
+    }
+
+    if (!users.length) {
+      return res.status(401).json({ error: 'No advocate account found with this email or phone number.' });
+    }
+
+    const matched = users.find(u => u.password === password.trim());
+    if (!matched) {
+      return res.status(401).json({ error: 'Incorrect password. Please try again.' });
+    }
+    if (matched.status !== 'approved') {
+      return res.status(403).json({ error: 'Your advocate account is pending admin approval. You will be notified once verified.' });
+    }
+
+    const token = jwt.sign(
+      { id: matched.id, role: 'lawyer', phone: matched.phone, email: matched.email },
+      JWT_SECRET,
+      { expiresIn: '7d' }
+    );
+
+    return res.status(200).json({
+      status: 'success',
+      token,
+      user: { ...matched, role: 'lawyer' }
+    });
+  } catch (err) {
+    console.error('Advocate Login Error:', err);
+    return res.status(500).json({ error: 'Login failed. ' + err.message });
+  }
+};
+
+// Register handler under all path variants
+app.post('/api/auth/login-advocate', advocateLoginHandler);
+app.post('/auth/login-advocate', advocateLoginHandler);
+app.post('/.netlify/functions/api/auth/login-advocate', advocateLoginHandler);
+app.post('/functions/api/auth/login-advocate', advocateLoginHandler);
+
+// ── Dedicated Client Login Route ──
+// Strictly queries client_profiles (with fallback to legacy 'clients' table)
+const clientLoginHandler = async (req, res) => {
+  try {
+    const { identifier, password } = req.body;
+    if (!identifier || !password) {
+      return res.status(400).json({ error: 'Email/phone and password are required.' });
+    }
+    if (!supabase) return res.status(500).json({ error: 'Database not configured.' });
+
+    const id = identifier.trim().toLowerCase();
+
+    // Query new client_profiles table first, fallback to legacy clients table
+    let users = [];
+    const { data: newRows } = await supabase
+      .from('client_profiles')
+      .select('*')
+      .or(`email.eq.${id},phone.eq.${identifier.trim()}`);
+    if (newRows?.length) users = newRows;
+
+    if (!users.length) {
+      const { data: legacyRows } = await supabase
+        .from('clients')
+        .select('*')
+        .or(`email.eq.${id},phone.eq.${identifier.trim()}`);
+      if (legacyRows?.length) users = legacyRows;
+    }
+
+    if (!users.length) {
+      return res.status(401).json({ error: 'No client account found with this email or phone number.' });
+    }
+
+    const matched = users.find(u => u.password === password.trim());
+    if (!matched) {
+      return res.status(401).json({ error: 'Incorrect password. Please try again.' });
+    }
+
+    const token = jwt.sign(
+      { id: matched.id, role: 'client', phone: matched.phone, email: matched.email },
+      JWT_SECRET,
+      { expiresIn: '7d' }
+    );
+
+    return res.status(200).json({
+      status: 'success',
+      token,
+      user: { ...matched, role: 'client' }
+    });
+  } catch (err) {
+    console.error('Client Login Error:', err);
+    return res.status(500).json({ error: 'Login failed. ' + err.message });
+  }
+};
+
+app.post('/api/auth/login-client', clientLoginHandler);
+app.post('/auth/login-client', clientLoginHandler);
+app.post('/.netlify/functions/api/auth/login-client', clientLoginHandler);
+app.post('/functions/api/auth/login-client', clientLoginHandler);
+
+// ── Dedicated Client Registration Route ──
+// Inserts into both client_profiles (new) and clients (legacy) tables
+const clientRegisterHandler = async (req, res) => {
+  try {
+    const { name, email, phone, password } = req.body;
+    if (!name || !phone || !password) {
+      return res.status(400).json({ error: 'Name, phone, and password are required.' });
+    }
+    if (!supabase) return res.status(500).json({ error: 'Database not configured.' });
+
+    const id = (email || '').trim().toLowerCase();
+
+    // Check duplicates across both tables
+    const { data: existingNew } = await supabase
+      .from('client_profiles')
+      .select('id')
+      .or(`${id ? `email.eq.${id},` : ''}phone.eq.${phone.trim()}`);
+    const { data: existingLegacy } = await supabase
+      .from('clients')
+      .select('id')
+      .or(`${id ? `email.eq.${id},` : ''}phone.eq.${phone.trim()}`);
+
+    if ((existingNew?.length || 0) + (existingLegacy?.length || 0) > 0) {
+      return res.status(409).json({ error: 'An account with this phone or email already exists. Please sign in.' });
+    }
+
+    const newClient = { name: name.trim(), email: (email || '').trim(), phone: phone.trim(), password: password.trim() };
+
+    // Insert into new client_profiles table
+    const { error: insertErr } = await supabase.from('client_profiles').insert([newClient]);
+    // Also insert into legacy clients table
+    await supabase.from('clients').insert([newClient]);
+
+    if (insertErr) throw insertErr;
+
+    const token = jwt.sign(
+      { role: 'client', phone: newClient.phone, email: newClient.email },
+      JWT_SECRET,
+      { expiresIn: '7d' }
+    );
+
+    return res.status(201).json({
+      status: 'success',
+      message: 'Client account created successfully.',
+      token,
+      user: { ...newClient, role: 'client' }
+    });
+  } catch (err) {
+    console.error('Client Register Error:', err);
+    return res.status(500).json({ error: 'Registration failed. ' + err.message });
+  }
+};
+
+app.post('/api/auth/register-client', clientRegisterHandler);
+app.post('/auth/register-client', clientRegisterHandler);
+app.post('/.netlify/functions/api/auth/register-client', clientRegisterHandler);
+app.post('/functions/api/auth/register-client', clientRegisterHandler);
+
+// Supabase Login Route for Lawyers and Clients (legacy — kept for backwards compat)
 app.post('/api/auth/login-supabase', async (req, res) => {
   try {
     const { identifier, password, role } = req.body;

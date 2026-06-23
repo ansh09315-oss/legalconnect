@@ -1,187 +1,167 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Lock, User, Eye, EyeOff, ShieldCheck, Scale, UserPlus, ArrowRight } from 'lucide-react';
+import {
+  Scale, User, Lock, Mail, Phone, ShieldCheck,
+  ArrowRight, Eye, EyeOff, Briefcase, UserPlus, ChevronRight
+} from 'lucide-react';
 import Header from './Header';
 import { supabase } from '../lib/supabaseClient';
 import { useAuth } from '../contexts/AuthContext';
 
-const Login = () => {
+/* ──────────────────────────────────────────
+   Shared small helpers
+────────────────────────────────────────── */
+const Feedback = ({ type, children }) => (
+  <motion.div
+    initial={{ opacity: 0, y: -6 }}
+    animate={{ opacity: 1, y: 0 }}
+    style={{
+      padding: '10px 14px', borderRadius: 10, fontSize: '0.82rem', lineHeight: 1.5,
+      background: type === 'error' ? 'rgba(239,68,68,0.1)' : 'rgba(16,185,129,0.1)',
+      border: `1px solid ${type === 'error' ? 'rgba(239,68,68,0.25)' : 'rgba(16,185,129,0.25)'}`,
+      color: type === 'error' ? '#f87171' : '#34d399',
+    }}
+  >{children}</motion.div>
+);
+
+const InputField = ({ icon: Icon, accent = '#00e5ff', ...props }) => {
+  const [focused, setFocused] = useState(false);
+  return (
+    <div style={{ position: 'relative' }}>
+      <Icon size={16} style={{
+        position: 'absolute', top: '50%', left: 14,
+        transform: 'translateY(-50%)',
+        color: focused ? accent : '#475569', transition: 'color 0.2s', pointerEvents: 'none'
+      }} />
+      <input
+        {...props}
+        onFocus={e => { setFocused(true); props.onFocus?.(e); }}
+        onBlur={e => { setFocused(false); props.onBlur?.(e); }}
+        style={{
+          width: '100%', background: 'rgba(255,255,255,0.04)',
+          border: `1px solid ${focused ? `${accent}55` : 'rgba(255,255,255,0.08)'}`,
+          padding: '12px 14px 12px 44px', borderRadius: 12, color: 'white',
+          fontFamily: 'Inter, sans-serif', fontSize: '0.9rem', outline: 'none',
+          transition: 'border-color 0.2s', boxSizing: 'border-box',
+          ...(props.style || {})
+        }}
+      />
+    </div>
+  );
+};
+
+const SubmitBtn = ({ loading, label, loadLabel, accent = '#00e5ff', textColor = '#050A14' }) => (
+  <motion.button
+    type="submit"
+    disabled={loading}
+    whileHover={{ scale: loading ? 1 : 1.02 }}
+    whileTap={{ scale: loading ? 1 : 0.97 }}
+    style={{
+      padding: '13px 20px', borderRadius: 12, border: 'none', marginTop: 4,
+      cursor: loading ? 'not-allowed' : 'pointer',
+      background: loading ? `${accent}44` : `linear-gradient(135deg, ${accent}, ${accent}bb)`,
+      color: textColor, fontWeight: 700, fontSize: '0.95rem',
+      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+      fontFamily: 'Inter,sans-serif', transition: 'opacity 0.2s', opacity: loading ? 0.7 : 1,
+      width: '100%', boxShadow: loading ? 'none' : `0 8px 24px ${accent}33`
+    }}
+  >
+    {loading ? (
+      <><div style={{
+        width: 18, height: 18, border: `2px solid ${textColor}`,
+        borderTopColor: 'transparent', borderRadius: '50%',
+        animation: 'spin 0.8s linear infinite'
+      }} />{loadLabel}</>
+    ) : (
+      <><ShieldCheck size={17} />{label}<ArrowRight size={16} /></>
+    )}
+  </motion.button>
+);
+
+/* ──────────────────────────────────────────
+   Advocate Login Form
+────────────────────────────────────────── */
+const AdvocateLoginForm = ({ onSuccess, onError }) => {
   const navigate = useNavigate();
   const { login } = useAuth();
-  const [tab, setTab] = useState('login'); // 'login' | 'register'
+  const [identifier, setIdentifier] = useState('');
+  const [password, setPassword] = useState('');
   const [showPwd, setShowPwd] = useState(false);
-  const [showConfirm, setShowConfirm] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
 
-  // Shared fields
-  const [identifier, setIdentifier] = useState('');   // name or email
-  const [password, setPassword] = useState('');
-  const [loginRole, setLoginRole] = useState('client'); // 'client' | 'lawyer'
-
-  // Register-only fields
-  const [regName, setRegName] = useState('');
-  const [regPhone, setRegPhone] = useState('');
-  const [regEmail, setRegEmail] = useState('');
-  const [regPassword, setRegPassword] = useState('');
-  const [regConfirm, setRegConfirm] = useState('');
-
-  const reset = () => {
-    setError('');
-    setSuccess('');
-  };
-
-  /* ─── LOGIN ─── */
-  const handleLogin = async (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     if (!identifier.trim() || !password.trim()) {
-      setError('Please enter your name/email and password.');
+      setError('Please enter your email/phone and password.');
       return;
     }
     setLoading(true);
     setError('');
-    setSuccess('');
 
     const idLower = identifier.trim().toLowerCase();
 
     try {
-      const { supabase } = await import('../lib/supabaseClient');
-
-      if (loginRole === 'lawyer') {
-        // --- Advocate/Lawyer Login ---
-        try {
-          let res = await fetch('/.netlify/functions/api/auth/login-supabase', {
+      // 1. Try backend Netlify function first
+      try {
+        let res = await fetch('/.netlify/functions/api/auth/login-advocate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ identifier: identifier.trim(), password: password.trim() })
+        });
+        if (res.status === 404) {
+          res = await fetch('/.netlify/functions/api/auth/login-supabase', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ identifier: identifier.trim(), password: password.trim(), role: 'lawyer' })
           });
-
-          if (res.status === 404) { // Fallback if serverless prefix stripped
-            res = await fetch('/.netlify/functions/api/auth/login-supabase'.replace('/api/auth', '/auth'), {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ identifier: identifier.trim(), password: password.trim(), role: 'lawyer' })
-            });
-          }
-
-          const contentType = res.headers.get('content-type');
-          if (res.ok && contentType && contentType.includes('application/json')) {
-            let data = await res.json();
-            if (data && data.status === 'success') {
-              login(data.token, data.user);
-              localStorage.setItem('lawyerAccount', JSON.stringify(data.user));
-              navigate('/lawyer');
-              return;
-            } else {
-              setError(data?.error || 'Invalid advocate credentials.');
-              setLoading(false);
-              return;
-            }
-          }
-        } catch (backendErr) {
-          console.warn("Backend lawyer login error (falling back to direct Supabase):", backendErr);
         }
-
-        // Direct Supabase Fallback for Lawyer
-        const { data: dbLawyers, error: lawyerErr } = await supabase
-          .from('lawyers')
-          .select('*')
-          .or(`email.eq.${idLower},phone.eq.${identifier.trim()}`);
-
-        if (lawyerErr) {
-          console.error("Supabase query error:", lawyerErr);
-        }
-
-        if (dbLawyers && dbLawyers.length > 0) {
-          const matchedLawyer = dbLawyers.find(u => u.password === password.trim());
-          if (matchedLawyer) {
-            if (matchedLawyer.status !== 'approved') {
-              setError('Your advocate account is under review by our admin. Once approved, you can log in.');
-              setLoading(false);
-              return;
-            }
-            const userObj = { ...matchedLawyer, role: 'lawyer' };
-            const mockToken = 'mock_' + btoa(JSON.stringify(userObj));
-            login(mockToken, userObj);
-            localStorage.setItem('lawyerAccount', JSON.stringify(userObj));
+        const ct = res.headers.get('content-type');
+        if (res.ok && ct?.includes('application/json')) {
+          const data = await res.json();
+          if (data?.status === 'success') {
+            login(data.token, { ...data.user, role: 'lawyer' });
+            localStorage.setItem('lawyerAccount', JSON.stringify({ ...data.user, role: 'lawyer' }));
             navigate('/lawyer');
             return;
           }
+          if (data?.error) { setError(data.error); setLoading(false); return; }
         }
-        setError('No advocate account found with those credentials. Please check or make sure your application is approved.');
+      } catch (_) { /* fall through to direct Supabase */ }
+
+      // 2. Direct Supabase fallback (dev mode)
+      const { data: rows, error: dbErr } = await supabase
+        .from('lawyer_profiles')
+        .select('*')
+        .or(`email.eq.${idLower},phone.eq.${identifier.trim()}`);
+
+      // Also check legacy 'lawyers' table
+      const { data: legacyRows } = await supabase
+        .from('lawyers')
+        .select('*')
+        .or(`email.eq.${idLower},phone.eq.${identifier.trim()}`);
+
+      const allRows = [...(rows || []), ...(legacyRows || [])];
+
+      if (allRows.length > 0) {
+        const matched = allRows.find(u => u.password === password.trim());
+        if (matched) {
+          if (matched.status !== 'approved') {
+            setError('Your advocate account is pending admin approval. You will be notified once verified.');
+            setLoading(false);
+            return;
+          }
+          const userObj = { ...matched, role: 'lawyer' };
+          const mockToken = 'mock_' + btoa(JSON.stringify(userObj));
+          login(mockToken, userObj);
+          localStorage.setItem('lawyerAccount', JSON.stringify(userObj));
+          navigate('/lawyer');
+          return;
+        }
+        setError('Incorrect password. Please try again.');
       } else {
-        // --- Client Login ---
-        try {
-          let resClient = await fetch('/.netlify/functions/api/auth/login-supabase', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ identifier: identifier.trim(), password: password.trim(), role: 'client' })
-          });
-
-          if (resClient.status === 404) {
-            resClient = await fetch('/.netlify/functions/api/auth/login-supabase'.replace('/api/auth', '/auth'), {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ identifier: identifier.trim(), password: password.trim(), role: 'client' })
-            });
-          }
-
-          const contentType = resClient.headers.get('content-type');
-          if (resClient.ok && contentType && contentType.includes('application/json')) {
-            let clientData = await resClient.json();
-            if (clientData && clientData.status === 'success') {
-              login(clientData.token, clientData.user);
-              localStorage.setItem('clientAccount', JSON.stringify(clientData.user));
-              navigate('/client');
-              return;
-            } else {
-              setError(clientData?.error || 'Invalid client credentials.');
-              setLoading(false);
-              return;
-            }
-          }
-        } catch (backendErr) {
-          console.warn("Backend client login error (falling back to direct Supabase):", backendErr);
-        }
-
-        // Direct Supabase Fallback for Client
-        const { data: dbClients, error: clientErr } = await supabase
-          .from('clients')
-          .select('*')
-          .or(`email.eq.${idLower},phone.eq.${identifier.trim()}`);
-
-        if (clientErr) {
-          console.error("Supabase query error:", clientErr);
-        }
-
-        if (dbClients && dbClients.length > 0) {
-          const matchedClient = dbClients.find(u => u.password === password.trim());
-          if (matchedClient) {
-            const userObj = { ...matchedClient, role: 'client' };
-            const mockToken = 'mock_' + btoa(JSON.stringify(userObj));
-            login(mockToken, userObj);
-            localStorage.setItem('clientAccount', JSON.stringify(userObj));
-            navigate('/client');
-            return;
-          }
-        }
-
-        /* Legacy clientAccount fallback */
-        const legacyStr = localStorage.getItem('clientAccount');
-        if (legacyStr) {
-          const legacy = JSON.parse(legacyStr);
-          if (
-            (legacy.email?.toLowerCase() === idLower || legacy.phone === identifier.trim()) &&
-            (legacy.password === password.trim() || legacy.phone === password.trim())
-          ) {
-            localStorage.setItem('isAuthenticated', 'true');
-            navigate('/client');
-            return;
-          }
-        }
-        setError('No client account found with those credentials. Please check and try again.');
+        setError('No advocate account found with this email or phone number.');
       }
     } catch (err) {
       console.error(err);
@@ -191,7 +171,158 @@ const Login = () => {
     }
   };
 
-  /* ─── CLIENT REGISTER (quick form in Login page) ─── */
+  return (
+    <motion.form
+      key="advocate-login"
+      initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -10 }} transition={{ duration: 0.25 }}
+      onSubmit={handleSubmit}
+      style={{ display: 'flex', flexDirection: 'column', gap: 14 }}
+    >
+      <InputField
+        icon={Mail}
+        accent="#f43f5e"
+        type="text"
+        placeholder="Email or Phone Number"
+        value={identifier}
+        onChange={e => setIdentifier(e.target.value)}
+        required
+      />
+      <div style={{ position: 'relative' }}>
+        <InputField
+          icon={Lock}
+          accent="#f43f5e"
+          type={showPwd ? 'text' : 'password'}
+          placeholder="Password"
+          value={password}
+          onChange={e => setPassword(e.target.value)}
+          required
+          style={{ paddingRight: 44 }}
+        />
+        <button type="button" onClick={() => setShowPwd(p => !p)}
+          style={{ position: 'absolute', right: 14, top: '50%', transform: 'translateY(-50%)',
+            background: 'transparent', border: 'none', color: '#64748b', cursor: 'pointer' }}>
+          {showPwd ? <EyeOff size={16} /> : <Eye size={16} />}
+        </button>
+      </div>
+
+      {error && <Feedback type="error">{error}</Feedback>}
+
+      <SubmitBtn loading={loading} label="Login as Advocate"
+        loadLabel="Verifying…" accent="#f43f5e" textColor="white" />
+
+      <p style={{ textAlign: 'center', fontSize: '0.8rem', color: '#475569', marginTop: 4 }}>
+        Not registered?{' '}
+        <Link to="/register-lawyer"
+          style={{ color: '#f43f5e', textDecoration: 'none', fontWeight: 600 }}>
+          Apply as Advocate →
+        </Link>
+      </p>
+    </motion.form>
+  );
+};
+
+/* ──────────────────────────────────────────
+   Client Login / Register Form
+────────────────────────────────────────── */
+const ClientForm = () => {
+  const navigate = useNavigate();
+  const { login } = useAuth();
+  const [tab, setTab] = useState('login'); // 'login' | 'register'
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
+  const [showPwd, setShowPwd] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
+
+  // Login fields
+  const [identifier, setIdentifier] = useState('');
+  const [password, setPassword] = useState('');
+
+  // Register fields
+  const [regName, setRegName] = useState('');
+  const [regPhone, setRegPhone] = useState('');
+  const [regEmail, setRegEmail] = useState('');
+  const [regPassword, setRegPassword] = useState('');
+  const [regConfirm, setRegConfirm] = useState('');
+
+  const reset = () => { setError(''); setSuccess(''); };
+
+  /* ── Login ── */
+  const handleLogin = async (e) => {
+    e.preventDefault();
+    if (!identifier.trim() || !password.trim()) {
+      setError('Please enter your email/phone and password.');
+      return;
+    }
+    setLoading(true);
+    reset();
+    const idLower = identifier.trim().toLowerCase();
+
+    try {
+      // 1. Try backend
+      try {
+        let res = await fetch('/.netlify/functions/api/auth/login-client', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ identifier: identifier.trim(), password: password.trim() })
+        });
+        if (res.status === 404) {
+          res = await fetch('/.netlify/functions/api/auth/login-supabase', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ identifier: identifier.trim(), password: password.trim(), role: 'client' })
+          });
+        }
+        const ct = res.headers.get('content-type');
+        if (res.ok && ct?.includes('application/json')) {
+          const data = await res.json();
+          if (data?.status === 'success') {
+            login(data.token, { ...data.user, role: 'client' });
+            localStorage.setItem('clientAccount', JSON.stringify({ ...data.user, role: 'client' }));
+            navigate('/client');
+            return;
+          }
+          if (data?.error) { setError(data.error); setLoading(false); return; }
+        }
+      } catch (_) { /* fall through */ }
+
+      // 2. Direct Supabase fallback (dev mode) — check both new and legacy tables
+      const { data: newRows } = await supabase
+        .from('client_profiles')
+        .select('*')
+        .or(`email.eq.${idLower},phone.eq.${identifier.trim()}`);
+
+      const { data: legacyRows } = await supabase
+        .from('clients')
+        .select('*')
+        .or(`email.eq.${idLower},phone.eq.${identifier.trim()}`);
+
+      const allRows = [...(newRows || []), ...(legacyRows || [])];
+
+      if (allRows.length > 0) {
+        const matched = allRows.find(u => u.password === password.trim());
+        if (matched) {
+          const userObj = { ...matched, role: 'client' };
+          const mockToken = 'mock_' + btoa(JSON.stringify(userObj));
+          login(mockToken, userObj);
+          localStorage.setItem('clientAccount', JSON.stringify(userObj));
+          navigate('/client');
+          return;
+        }
+        setError('Incorrect password. Please try again.');
+      } else {
+        setError('No client account found with this email or phone number.');
+      }
+    } catch (err) {
+      console.error(err);
+      setError('Something went wrong. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  /* ── Register ── */
   const handleRegister = async (e) => {
     e.preventDefault();
     reset();
@@ -199,28 +330,24 @@ const Login = () => {
       setError('Name, phone and password are required.');
       return;
     }
-    if (regPassword !== regConfirm) {
-      setError('Passwords do not match.');
-      return;
-    }
-    if (regPassword.length < 6) {
-      setError('Password must be at least 6 characters.');
-      return;
-    }
+    if (regPassword !== regConfirm) { setError('Passwords do not match.'); return; }
+    if (regPassword.length < 6) { setError('Password must be at least 6 characters.'); return; }
+
     setLoading(true);
     try {
-      // Check duplicate client in Supabase
-      const { data: existing, error: checkErr } = await supabase
-        .from('clients')
-        .select('id, email, phone')
+      // Check for duplicate in both tables
+      const { data: existingNew } = await supabase
+        .from('client_profiles')
+        .select('id')
         .or(`email.eq.${regEmail.trim().toLowerCase()},phone.eq.${regPhone.trim()}`);
 
-      if (checkErr) {
-        throw new Error('Database check failed. Please try again.');
-      }
+      const { data: existingLegacy } = await supabase
+        .from('clients')
+        .select('id')
+        .or(`email.eq.${regEmail.trim().toLowerCase()},phone.eq.${regPhone.trim()}`);
 
-      if (existing && existing.length > 0) {
-        setError('An account with this phone/email already exists. Please log in.');
+      if ((existingNew?.length || 0) + (existingLegacy?.length || 0) > 0) {
+        setError('An account with this phone or email already exists. Please sign in.');
         setLoading(false);
         return;
       }
@@ -232,278 +359,340 @@ const Login = () => {
         password: regPassword.trim(),
       };
 
+      // Insert into new client_profiles table
       const { error: insertErr } = await supabase
-        .from('clients')
+        .from('client_profiles')
         .insert([newClient]);
+
+      // Also insert into legacy clients table for backwards compatibility
+      await supabase.from('clients').insert([newClient]).then(() => {});
 
       if (insertErr) throw insertErr;
 
-      // Authenticate with the new backend to get JWT
-      let resAuth = await fetch('/.netlify/functions/api/auth/login-supabase', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ identifier: regPhone.trim(), password: regPassword.trim(), role: 'client' })
-      });
-      if (resAuth.status === 404) {
-        resAuth = await fetch('/.netlify/functions/api/auth/login-supabase'.replace('/api/auth', '/auth'), {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ identifier: regPhone.trim(), password: regPassword.trim(), role: 'client' })
-        });
-      }
-      
-      const authData = await resAuth.json();
-      if (resAuth.ok && authData.status === 'success') {
-        login(authData.token, authData.user);
-        localStorage.setItem('clientAccount', JSON.stringify(authData.user));
-        setSuccess('Account created! Redirecting to your dashboard…');
-        setTimeout(() => navigate('/client'), 1200);
-      } else {
-        throw new Error('Could not authenticate new account.');
-      }
+      // Auto-login after registration
+      const userObj = { ...newClient, role: 'client' };
+      const mockToken = 'mock_' + btoa(JSON.stringify(userObj));
+      login(mockToken, userObj);
+      localStorage.setItem('clientAccount', JSON.stringify(userObj));
+      setSuccess('Account created! Redirecting to your dashboard…');
+      setTimeout(() => navigate('/client'), 1200);
     } catch (err) {
+      console.error(err);
       setError('Registration failed. Please try again.');
     } finally {
       setLoading(false);
     }
   };
 
-  /* ─── Shared styles ─── */
-  const fieldRow = { position: 'relative' };
-  const inp = {
-    width: '100%', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)',
-    padding: '13px 14px 13px 44px', borderRadius: 12, color: 'white',
-    fontFamily: 'Inter, sans-serif', fontSize: '0.92rem', outline: 'none',
-    transition: 'border-color 0.2s', boxSizing: 'border-box',
-  };
-  const iconPos = { position: 'absolute', top: '50%', left: 14, transform: 'translateY(-50%)', color: '#475569', pointerEvents: 'none' };
+  const accent = '#00e5ff';
+
+  return (
+    <motion.div
+      key="client-form"
+      initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -10 }} transition={{ duration: 0.25 }}
+    >
+      {/* Tab switcher */}
+      <div style={{ display: 'flex', background: 'rgba(255,255,255,0.03)', borderRadius: 10,
+        padding: 4, marginBottom: 20, border: '1px solid rgba(255,255,255,0.05)' }}>
+        {[['login', 'Sign In'], ['register', 'Create Account']].map(([id, label]) => (
+          <button key={id} type="button" onClick={() => { setTab(id); reset(); }}
+            style={{
+              flex: 1, padding: '9px 12px', borderRadius: 7, border: 'none', cursor: 'pointer',
+              background: tab === id ? 'rgba(0,229,255,0.1)' : 'transparent',
+              color: tab === id ? accent : '#64748b',
+              fontWeight: tab === id ? 700 : 500, fontSize: '0.85rem',
+              transition: 'all 0.2s', fontFamily: 'Inter,sans-serif'
+            }}>{label}</button>
+        ))}
+      </div>
+
+      <AnimatePresence mode="wait">
+        {tab === 'login' && (
+          <motion.form key="client-login"
+            initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: 10 }} onSubmit={handleLogin}
+            style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+            <InputField icon={User} accent={accent} type="text"
+              placeholder="Email or Phone Number" value={identifier}
+              onChange={e => setIdentifier(e.target.value)} required />
+            <div style={{ position: 'relative' }}>
+              <InputField icon={Lock} accent={accent}
+                type={showPwd ? 'text' : 'password'} placeholder="Password"
+                value={password} onChange={e => setPassword(e.target.value)}
+                required style={{ paddingRight: 44 }} />
+              <button type="button" onClick={() => setShowPwd(p => !p)}
+                style={{ position: 'absolute', right: 14, top: '50%', transform: 'translateY(-50%)',
+                  background: 'transparent', border: 'none', color: '#64748b', cursor: 'pointer' }}>
+                {showPwd ? <EyeOff size={16} /> : <Eye size={16} />}
+              </button>
+            </div>
+            {error && <Feedback type="error">{error}</Feedback>}
+            <SubmitBtn loading={loading} label="Sign In as Client"
+              loadLabel="Signing in…" accent={accent} textColor="#050A14" />
+          </motion.form>
+        )}
+
+        {tab === 'register' && (
+          <motion.form key="client-register"
+            initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: -10 }} onSubmit={handleRegister}
+            style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <InputField icon={User} accent={accent} type="text"
+              placeholder="Full Name *" value={regName}
+              onChange={e => setRegName(e.target.value)} required />
+            <InputField icon={Phone} accent={accent} type="tel"
+              placeholder="Phone Number *" value={regPhone}
+              onChange={e => setRegPhone(e.target.value)} required />
+            <InputField icon={Mail} accent={accent} type="email"
+              placeholder="Email Address (optional)" value={regEmail}
+              onChange={e => setRegEmail(e.target.value)} />
+            <div style={{ position: 'relative' }}>
+              <InputField icon={Lock} accent={accent}
+                type={showPwd ? 'text' : 'password'}
+                placeholder="Password (min. 6 chars) *"
+                value={regPassword} onChange={e => setRegPassword(e.target.value)}
+                required style={{ paddingRight: 44 }} />
+              <button type="button" onClick={() => setShowPwd(p => !p)}
+                style={{ position: 'absolute', right: 14, top: '50%', transform: 'translateY(-50%)',
+                  background: 'transparent', border: 'none', color: '#64748b', cursor: 'pointer' }}>
+                {showPwd ? <EyeOff size={16} /> : <Eye size={16} />}
+              </button>
+            </div>
+            <div style={{ position: 'relative' }}>
+              <InputField icon={Lock} accent={accent}
+                type={showConfirm ? 'text' : 'password'}
+                placeholder="Confirm Password *"
+                value={regConfirm} onChange={e => setRegConfirm(e.target.value)}
+                required style={{ paddingRight: 44 }} />
+              <button type="button" onClick={() => setShowConfirm(p => !p)}
+                style={{ position: 'absolute', right: 14, top: '50%', transform: 'translateY(-50%)',
+                  background: 'transparent', border: 'none', color: '#64748b', cursor: 'pointer' }}>
+                {showConfirm ? <EyeOff size={16} /> : <Eye size={16} />}
+              </button>
+            </div>
+            {error && <Feedback type="error">{error}</Feedback>}
+            {success && <Feedback type="success">{success}</Feedback>}
+            <SubmitBtn loading={loading} label="Create Client Account"
+              loadLabel="Creating account…" accent="#818cf8" textColor="white" />
+            <p style={{ textAlign: 'center', fontSize: '0.78rem', color: '#475569' }}>
+              Are you a lawyer?{' '}
+              <Link to="/register-lawyer" style={{ color: accent, textDecoration: 'none', fontWeight: 600 }}>
+                Join as Advocate →
+              </Link>
+            </p>
+          </motion.form>
+        )}
+      </AnimatePresence>
+    </motion.div>
+  );
+};
+
+/* ──────────────────────────────────────────
+   Main Dual-Portal Login Page
+────────────────────────────────────────── */
+const Login = () => {
+  const [activePortal, setActivePortal] = useState(null); // null | 'advocate' | 'client'
+
+  const portals = [
+    {
+      id: 'advocate',
+      icon: Scale,
+      title: 'Advocate Portal',
+      subtitle: 'Access your case console & client assignments',
+      accent: '#f43f5e',
+      gradient: 'linear-gradient(135deg, rgba(244,63,94,0.15), rgba(225,29,72,0.08))',
+      border: 'rgba(244,63,94,0.25)',
+      glow: 'rgba(244,63,94,0.15)',
+      badge: 'For Registered Lawyers',
+    },
+    {
+      id: 'client',
+      icon: Briefcase,
+      title: 'Client Portal',
+      subtitle: 'Manage your cases, hire advocates & track progress',
+      accent: '#00e5ff',
+      gradient: 'linear-gradient(135deg, rgba(0,229,255,0.12), rgba(129,140,248,0.08))',
+      border: 'rgba(0,229,255,0.2)',
+      glow: 'rgba(0,229,255,0.12)',
+      badge: 'For Clients & Individuals',
+    }
+  ];
 
   return (
     <>
       <Header />
-      <div style={{ position: 'relative', minHeight: '100vh', display: 'flex', alignItems: 'center',
-        justifyContent: 'center', overflow: 'hidden', paddingTop: 100, paddingBottom: 40 }}>
+      <div style={{
+        position: 'relative', minHeight: '100vh', display: 'flex', alignItems: 'center',
+        justifyContent: 'center', overflow: 'hidden', paddingTop: 100, paddingBottom: 60,
+        padding: '100px 20px 60px'
+      }}>
+        {/* Ambient background blobs */}
+        <div style={{
+          position: 'fixed', top: '10%', left: '5%', width: 500, height: 500,
+          background: 'radial-gradient(circle, rgba(244,63,94,0.07) 0%, transparent 70%)',
+          filter: 'blur(80px)', borderRadius: '50%', zIndex: 0, pointerEvents: 'none'
+        }} />
+        <div style={{
+          position: 'fixed', bottom: '10%', right: '5%', width: 500, height: 500,
+          background: 'radial-gradient(circle, rgba(0,229,255,0.07) 0%, transparent 70%)',
+          filter: 'blur(80px)', borderRadius: '50%', zIndex: 0, pointerEvents: 'none'
+        }} />
 
-        {/* Ambient blobs */}
-        <div style={{ position: 'absolute', top: '15%', left: '8%', width: 350, height: 350,
-          background: 'radial-gradient(circle,rgba(0,229,255,0.12) 0%,transparent 70%)',
-          filter: 'blur(60px)', borderRadius: '50%', zIndex: 0 }} />
-        <div style={{ position: 'absolute', bottom: '15%', right: '8%', width: 400, height: 400,
-          background: 'radial-gradient(circle,rgba(129,140,248,0.1) 0%,transparent 70%)',
-          filter: 'blur(80px)', borderRadius: '50%', zIndex: 0 }} />
-
-        <motion.div initial={{ opacity: 0, scale: 0.95, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }}
-          transition={{ duration: 0.45, ease: [0.23, 1, 0.32, 1] }}
-          style={{ width: '100%', maxWidth: 460, zIndex: 1, margin: '0 16px',
-            background: 'rgba(18,20,30,0.75)', border: '1px solid rgba(255,255,255,0.08)',
-            borderRadius: 24, padding: '40px 40px', backdropFilter: 'blur(22px)',
-            boxShadow: '0 25px 60px rgba(0,0,0,0.5)' }}>
-
-          {/* Icon */}
-          <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 20 }}>
-            <div style={{ width: 58, height: 58, borderRadius: 16,
-              background: 'linear-gradient(135deg,rgba(0,229,255,0.15),rgba(129,140,248,0.15))',
-              border: '1px solid rgba(0,229,255,0.25)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <Scale size={28} color="#00e5ff" />
+        <div style={{ width: '100%', maxWidth: 900, zIndex: 1 }}>
+          {/* Header text */}
+          <motion.div
+            initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }}
+            style={{ textAlign: 'center', marginBottom: 48 }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 20 }}>
+              <div style={{
+                width: 64, height: 64, borderRadius: 18,
+                background: 'linear-gradient(135deg, rgba(0,229,255,0.15), rgba(244,63,94,0.15))',
+                border: '1px solid rgba(255,255,255,0.1)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center'
+              }}>
+                <Scale size={30} color="#00e5ff" />
+              </div>
             </div>
-          </div>
+            <h1 style={{
+              fontFamily: 'Outfit, sans-serif', fontSize: 'clamp(1.8rem, 4vw, 2.4rem)',
+              fontWeight: 800, color: 'white', marginBottom: 10
+            }}>LegalConnect Portal</h1>
+            <p style={{ color: '#64748b', fontSize: '0.95rem' }}>
+              Select your portal to continue
+            </p>
+          </motion.div>
 
-          <h1 style={{ fontFamily: 'Outfit,sans-serif', fontSize: '1.7rem', fontWeight: 800,
-            color: 'white', textAlign: 'center', marginBottom: 6 }}>LegalConnect Portal</h1>
-          <p style={{ color: '#64748b', textAlign: 'center', fontSize: '0.88rem', marginBottom: 28 }}>
-            Secure access for clients, advocates & admin
-          </p>
+          {/* Portal Cards */}
+          <div style={{
+            display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
+            gap: 24, marginBottom: 32
+          }}>
+            {portals.map((portal, i) => {
+              const IconComp = portal.icon;
+              const isActive = activePortal === portal.id;
+              return (
+                <motion.div
+                  key={portal.id}
+                  initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: i * 0.1 }}
+                  onClick={() => setActivePortal(isActive ? null : portal.id)}
+                  whileHover={{ scale: 1.02, y: -4 }}
+                  whileTap={{ scale: 0.98 }}
+                  style={{
+                    background: isActive ? portal.gradient : 'rgba(18,20,30,0.7)',
+                    border: `1px solid ${isActive ? portal.border : 'rgba(255,255,255,0.07)'}`,
+                    borderRadius: 20, padding: '28px 28px',
+                    cursor: 'pointer', backdropFilter: 'blur(20px)',
+                    boxShadow: isActive ? `0 20px 60px ${portal.glow}` : '0 4px 20px rgba(0,0,0,0.3)',
+                    transition: 'box-shadow 0.3s, border-color 0.3s, background 0.3s',
+                    position: 'relative', overflow: 'hidden'
+                  }}
+                >
+                  {/* Glow orb */}
+                  {isActive && (
+                    <div style={{
+                      position: 'absolute', top: -40, right: -40, width: 200, height: 200,
+                      borderRadius: '50%', background: `radial-gradient(circle, ${portal.glow} 0%, transparent 70%)`,
+                      pointerEvents: 'none'
+                    }} />
+                  )}
 
-          {/* Tab switcher */}
-          <div style={{ display: 'flex', background: 'rgba(255,255,255,0.04)', borderRadius: 12,
-            padding: 4, marginBottom: 28, border: '1px solid rgba(255,255,255,0.06)' }}>
-            {[['login', 'Sign In'], ['register', 'Create Account']].map(([id, label]) => (
-              <button key={id} type="button" onClick={() => { setTab(id); reset(); }}
-                style={{ flex: 1, padding: '10px 12px', borderRadius: 8, border: 'none', cursor: 'pointer',
-                  background: tab === id ? 'rgba(0,229,255,0.12)' : 'transparent',
-                  color: tab === id ? '#00e5ff' : '#64748b',
-                  fontWeight: tab === id ? 700 : 500, fontSize: '0.88rem',
-                  transition: 'all 0.2s', fontFamily: 'Inter,sans-serif' }}>
-                {label}
-              </button>
-            ))}
-          </div>
-
-          {/* Role selector for login */}
-          {tab === 'login' && (
-            <div style={{ display: 'flex', gap: 12, marginBottom: 24 }}>
-              {[
-                { id: 'client', label: 'Client Portal', icon: User },
-                { id: 'lawyer', label: 'Advocate Portal', icon: Scale }
-              ].map(roleItem => {
-                const IconComponent = roleItem.icon;
-                const active = loginRole === roleItem.id;
-                return (
-                  <button key={roleItem.id} type="button" onClick={() => setLoginRole(roleItem.id)}
-                    style={{
-                      flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-                      padding: '12px 14px', borderRadius: 12, border: '1px solid',
-                      borderColor: active ? 'rgba(0,229,255,0.3)' : 'rgba(255,255,255,0.06)',
-                      background: active ? 'rgba(0,229,255,0.08)' : 'rgba(255,255,255,0.02)',
-                      color: active ? '#00e5ff' : '#64748b', cursor: 'pointer',
-                      transition: 'all 0.2s', fontFamily: 'Inter,sans-serif',
-                      fontWeight: active ? 700 : 500, fontSize: '0.85rem'
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 16 }}>
+                    <div style={{
+                      width: 54, height: 54, borderRadius: 15,
+                      background: `${portal.accent}18`,
+                      border: `1px solid ${portal.accent}33`,
+                      display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0
                     }}>
-                    <IconComponent size={16} color={active ? '#00e5ff' : '#64748b'} />
-                    {roleItem.label}
-                  </button>
-                );
-              })}
-            </div>
-          )}
+                      <IconComp size={26} color={portal.accent} />
+                    </div>
+                    <div>
+                      <div style={{ fontFamily: 'Outfit, sans-serif', fontSize: '1.15rem',
+                        fontWeight: 800, color: 'white' }}>{portal.title}</div>
+                      <div style={{
+                        display: 'inline-block', marginTop: 4, padding: '2px 10px',
+                        borderRadius: 20, fontSize: '0.7rem', fontWeight: 700,
+                        background: `${portal.accent}15`, color: portal.accent,
+                        border: `1px solid ${portal.accent}25`
+                      }}>{portal.badge}</div>
+                    </div>
+                    <ChevronRight size={20} color={isActive ? portal.accent : '#475569'}
+                      style={{ marginLeft: 'auto', transition: 'transform 0.3s, color 0.3s',
+                        transform: isActive ? 'rotate(90deg)' : 'rotate(0deg)' }} />
+                  </div>
+                  <p style={{ color: '#94a3b8', fontSize: '0.87rem', lineHeight: 1.5, margin: 0 }}>
+                    {portal.subtitle}
+                  </p>
+                </motion.div>
+              );
+            })}
+          </div>
 
-          {/* ── LOGIN FORM ── */}
+          {/* Expanded Form panel */}
           <AnimatePresence mode="wait">
-            {tab === 'login' && (
-              <motion.form key="login" initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: 10 }} onSubmit={handleLogin}
-                style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+            {activePortal && (
+              <motion.div
+                key={activePortal}
+                initial={{ opacity: 0, height: 0, y: -10 }}
+                animate={{ opacity: 1, height: 'auto', y: 0 }}
+                exit={{ opacity: 0, height: 0, y: -10 }}
+                transition={{ duration: 0.35, ease: [0.23, 1, 0.32, 1] }}
+                style={{ overflow: 'hidden' }}
+              >
+                <div style={{
+                  background: 'rgba(12,14,24,0.85)',
+                  border: `1px solid ${activePortal === 'advocate' ? 'rgba(244,63,94,0.2)' : 'rgba(0,229,255,0.15)'}`,
+                  borderRadius: 20, padding: '36px 36px', backdropFilter: 'blur(24px)',
+                  maxWidth: 480, margin: '0 auto',
+                  boxShadow: `0 30px 80px ${activePortal === 'advocate' ? 'rgba(244,63,94,0.1)' : 'rgba(0,229,255,0.08)'}`
+                }}>
+                  {/* Form header */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 24 }}>
+                    <div style={{
+                      width: 40, height: 40, borderRadius: 11,
+                      background: activePortal === 'advocate' ? 'rgba(244,63,94,0.15)' : 'rgba(0,229,255,0.12)',
+                      border: `1px solid ${activePortal === 'advocate' ? 'rgba(244,63,94,0.3)' : 'rgba(0,229,255,0.25)'}`,
+                      display: 'flex', alignItems: 'center', justifyContent: 'center'
+                    }}>
+                      {activePortal === 'advocate' ? <Scale size={20} color="#f43f5e" /> : <User size={20} color="#00e5ff" />}
+                    </div>
+                    <div>
+                      <div style={{ fontFamily: 'Outfit, sans-serif', fontWeight: 800, fontSize: '1.1rem', color: 'white' }}>
+                        {activePortal === 'advocate' ? 'Advocate Login' : 'Client Access'}
+                      </div>
+                      <div style={{ color: '#475569', fontSize: '0.78rem' }}>
+                        {activePortal === 'advocate' ? 'Secured advocate console entry' : 'Manage your legal matters'}
+                      </div>
+                    </div>
+                  </div>
 
-                <div style={fieldRow}>
-                  <User size={16} style={iconPos} />
-                  <input type="text" placeholder="Email or Phone Number" value={identifier}
-                    onChange={e => setIdentifier(e.target.value)} required style={inp}
-                    onFocus={e => e.target.style.borderColor = 'rgba(0,229,255,0.4)'}
-                    onBlur={e => e.target.style.borderColor = 'rgba(255,255,255,0.08)'} />
+                  {activePortal === 'advocate' ? <AdvocateLoginForm /> : <ClientForm />}
                 </div>
-
-                <div style={fieldRow}>
-                  <Lock size={16} style={iconPos} />
-                  <input type={showPwd ? 'text' : 'password'} placeholder="Password" value={password}
-                    onChange={e => setPassword(e.target.value)} required
-                    style={{ ...inp, paddingRight: 44 }}
-                    onFocus={e => e.target.style.borderColor = 'rgba(0,229,255,0.4)'}
-                    onBlur={e => e.target.style.borderColor = 'rgba(255,255,255,0.08)'} />
-                  <button type="button" onClick={() => setShowPwd(p => !p)}
-                    style={{ position: 'absolute', right: 14, top: '50%', transform: 'translateY(-50%)',
-                      background: 'transparent', border: 'none', color: '#64748b', cursor: 'pointer' }}>
-                    {showPwd ? <EyeOff size={16} /> : <Eye size={16} />}
-                  </button>
-                </div>
-
-                {error && <Feedback type="error">{error}</Feedback>}
-                {success && <Feedback type="success">{success}</Feedback>}
-
-                <SubmitBtn loading={loading} icon={<ShieldCheck size={17} />} label="Sign In" loadLabel="Signing in…" />
-              </motion.form>
-            )}
-
-            {/* ── REGISTER FORM ── */}
-            {tab === 'register' && (
-              <motion.form key="register" initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: -10 }} onSubmit={handleRegister}
-                style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-
-                <div style={fieldRow}>
-                  <User size={16} style={iconPos} />
-                  <input type="text" placeholder="Full Name *" value={regName}
-                    onChange={e => setRegName(e.target.value)} required style={inp}
-                    onFocus={e => e.target.style.borderColor = 'rgba(129,140,248,0.4)'}
-                    onBlur={e => e.target.style.borderColor = 'rgba(255,255,255,0.08)'} />
-                </div>
-
-                <div style={fieldRow}>
-                  <svg style={{ ...iconPos, width: 16, height: 16 }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>
-                  <input type="email" placeholder="Email Address" value={regEmail}
-                    onChange={e => setRegEmail(e.target.value)} style={inp}
-                    onFocus={e => e.target.style.borderColor = 'rgba(129,140,248,0.4)'}
-                    onBlur={e => e.target.style.borderColor = 'rgba(255,255,255,0.08)'} />
-                </div>
-
-                <div style={fieldRow}>
-                  <svg style={{ ...iconPos, width: 16, height: 16 }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 13.6a19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 3.77 3h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 10.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 17z"/></svg>
-                  <input type="tel" placeholder="Phone Number *" value={regPhone}
-                    onChange={e => setRegPhone(e.target.value)} required style={inp}
-                    onFocus={e => e.target.style.borderColor = 'rgba(129,140,248,0.4)'}
-                    onBlur={e => e.target.style.borderColor = 'rgba(255,255,255,0.08)'} />
-                </div>
-
-                <div style={fieldRow}>
-                  <Lock size={16} style={iconPos} />
-                  <input type={showPwd ? 'text' : 'password'} placeholder="Password (min. 6 chars) *"
-                    value={regPassword} onChange={e => setRegPassword(e.target.value)} required
-                    style={{ ...inp, paddingRight: 44 }}
-                    onFocus={e => e.target.style.borderColor = 'rgba(129,140,248,0.4)'}
-                    onBlur={e => e.target.style.borderColor = 'rgba(255,255,255,0.08)'} />
-                  <button type="button" onClick={() => setShowPwd(p => !p)}
-                    style={{ position: 'absolute', right: 14, top: '50%', transform: 'translateY(-50%)',
-                      background: 'transparent', border: 'none', color: '#64748b', cursor: 'pointer' }}>
-                    {showPwd ? <EyeOff size={16} /> : <Eye size={16} />}
-                  </button>
-                </div>
-
-                <div style={fieldRow}>
-                  <Lock size={16} style={iconPos} />
-                  <input type={showConfirm ? 'text' : 'password'} placeholder="Confirm Password *"
-                    value={regConfirm} onChange={e => setRegConfirm(e.target.value)} required
-                    style={{ ...inp, paddingRight: 44 }}
-                    onFocus={e => e.target.style.borderColor = 'rgba(129,140,248,0.4)'}
-                    onBlur={e => e.target.style.borderColor = 'rgba(255,255,255,0.08)'} />
-                  <button type="button" onClick={() => setShowConfirm(p => !p)}
-                    style={{ position: 'absolute', right: 14, top: '50%', transform: 'translateY(-50%)',
-                      background: 'transparent', border: 'none', color: '#64748b', cursor: 'pointer' }}>
-                    {showConfirm ? <EyeOff size={16} /> : <Eye size={16} />}
-                  </button>
-                </div>
-
-                {error && <Feedback type="error">{error}</Feedback>}
-                {success && <Feedback type="success">{success}</Feedback>}
-
-                <SubmitBtn loading={loading} icon={<UserPlus size={17} />} label="Create Account"
-                  loadLabel="Creating account…" color="linear-gradient(135deg,#818cf8,#6366f1)" />
-
-                <div style={{ textAlign: 'center', fontSize: '0.8rem', color: '#475569', marginTop: 4 }}>
-                  Are you a lawyer?{' '}
-                  <Link to="/register-lawyer" style={{ color: '#00e5ff', textDecoration: 'none', fontWeight: 600 }}>
-                    Join as Advocate →
-                  </Link>
-                </div>
-              </motion.form>
+              </motion.div>
             )}
           </AnimatePresence>
 
-          <div style={{ marginTop: 28, textAlign: 'center' }}>
-            <Link to="/" style={{ color: '#334155', textDecoration: 'none', fontSize: '0.83rem' }}>
+          {/* Admin Login link */}
+          <motion.div
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.4 }}
+            style={{ textAlign: 'center', marginTop: 32 }}
+          >
+            <Link to="/admin-login" style={{ color: '#334155', textDecoration: 'none', fontSize: '0.8rem',
+              display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+              <ShieldCheck size={13} />Admin Console →
+            </Link>
+            {' · '}
+            <Link to="/" style={{ color: '#334155', textDecoration: 'none', fontSize: '0.8rem' }}>
               ← Return to Home
             </Link>
-          </div>
-        </motion.div>
+          </motion.div>
+        </div>
       </div>
       <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
     </>
   );
 };
-
-/* ─── Small helpers ─── */
-const Feedback = ({ type, children }) => (
-  <div style={{
-    padding: '10px 14px', borderRadius: 10, fontSize: '0.83rem', lineHeight: 1.5,
-    background: type === 'error' ? 'rgba(239,68,68,0.1)' : 'rgba(16,185,129,0.1)',
-    border: `1px solid ${type === 'error' ? 'rgba(239,68,68,0.25)' : 'rgba(16,185,129,0.25)'}`,
-    color: type === 'error' ? '#f87171' : '#34d399',
-  }}>{children}</div>
-);
-
-const SubmitBtn = ({ loading, icon, label, loadLabel, color }) => (
-  <motion.button type="submit" disabled={loading} whileHover={{ scale: loading ? 1 : 1.02 }} whileTap={{ scale: loading ? 1 : 0.97 }}
-    style={{ padding: 14, borderRadius: 12, border: 'none', marginTop: 4,
-      cursor: loading ? 'not-allowed' : 'pointer',
-      background: loading ? 'rgba(0,229,255,0.25)' : (color || 'linear-gradient(135deg,#00e5ff,#0094aa)'),
-      color: color ? 'white' : '#050A14', fontWeight: 700, fontSize: '0.95rem',
-      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-      fontFamily: 'Inter,sans-serif', transition: 'opacity 0.2s', opacity: loading ? 0.7 : 1 }}>
-    {loading ? (
-      <><div style={{ width: 18, height: 18, border: `2px solid ${color ? 'white' : '#050A14'}`,
-        borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />{loadLabel}</>
-    ) : (
-      <>{icon}{label}<ArrowRight size={16} /></>
-    )}
-  </motion.button>
-);
 
 export default Login;
