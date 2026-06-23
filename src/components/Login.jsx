@@ -8,6 +8,20 @@ import {
 import Header from './Header';
 import { supabase } from '../lib/supabaseClient';
 import { useAuth } from '../contexts/AuthContext';
+import bcrypt from 'bcryptjs';
+
+const verifyPassword = (inputPassword, storedPassword) => {
+  if (!storedPassword) return false;
+  if (storedPassword === inputPassword) return true;
+  if (storedPassword.startsWith('$2a$') || storedPassword.startsWith('$2b$') || storedPassword.startsWith('$2y$')) {
+    try {
+      return bcrypt.compareSync(inputPassword, storedPassword);
+    } catch (e) {
+      console.error('Bcrypt comparison failed:', e);
+    }
+  }
+  return false;
+};
 
 /* ──────────────────────────────────────────
    Shared small helpers
@@ -145,7 +159,7 @@ const AdvocateLoginForm = ({ onSuccess, onError }) => {
       const allRows = [...(rows || []), ...(legacyRows || [])];
 
       if (allRows.length > 0) {
-        const matched = allRows.find(u => u.password === password.trim());
+        const matched = allRows.find(u => verifyPassword(password.trim(), u.password));
         if (matched) {
           if (matched.status !== 'approved') {
             setError('Your advocate account is pending admin approval. You will be notified once verified.');
@@ -301,7 +315,7 @@ const ClientForm = () => {
       const allRows = [...(newRows || []), ...(legacyRows || [])];
 
       if (allRows.length > 0) {
-        const matched = allRows.find(u => u.password === password.trim());
+        const matched = allRows.find(u => verifyPassword(password.trim(), u.password));
         if (matched) {
           const userObj = { ...matched, role: 'client' };
           const mockToken = 'mock_' + btoa(JSON.stringify(userObj));

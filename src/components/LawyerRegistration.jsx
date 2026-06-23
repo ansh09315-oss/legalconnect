@@ -91,7 +91,7 @@ const LawyerRegistration = () => {
     try {
       // ── Uniqueness check for email and phone ──
       const { data: existing, error: checkErr } = await supabase
-        .from('lawyers')
+        .from('lawyer_profiles')
         .select('id, email, phone')
         .or(`email.eq.${data.email.trim()},phone.eq.${data.phone.trim()}`);
 
@@ -160,16 +160,11 @@ const LawyerRegistration = () => {
       if (data.password) payload.password = data.password;
       if (photoUrl) payload.photo_url = photoUrl;
 
-      let { error: insertError } = await supabase.from('lawyers').insert([payload]);
+      let { error: insertError } = await supabase.from('lawyer_profiles').insert([payload]);
 
-      // Auto-retry: strip unknown columns if needed
-      if (insertError?.message?.includes('photo_url')) {
-        delete payload.photo_url;
-        ({ error: insertError } = await supabase.from('lawyers').insert([payload]));
-      }
-      if (insertError?.message?.includes('password')) {
-        delete payload.password;
-        ({ error: insertError } = await supabase.from('lawyers').insert([payload]));
+      if (!insertError) {
+        // Also insert into legacy lawyers table for backward compatibility
+        await supabase.from('lawyers').insert([payload]).catch(e => console.warn('Legacy insert error:', e));
       }
 
       if (insertError) throw insertError;

@@ -4,6 +4,20 @@ const cors = require('cors');
 const mongoose = require('mongoose');
 const jwt = require('jsonwebtoken');
 const { createClient } = require('@supabase/supabase-js');
+const bcrypt = require('bcryptjs');
+
+const verifyPassword = (inputPassword, storedPassword) => {
+  if (!storedPassword) return false;
+  if (storedPassword === inputPassword) return true;
+  if (storedPassword.startsWith('$2a$') || storedPassword.startsWith('$2b$') || storedPassword.startsWith('$2y$')) {
+    try {
+      return bcrypt.compareSync(inputPassword, storedPassword);
+    } catch (e) {
+      console.error('Bcrypt comparison failed:', e);
+    }
+  }
+  return false;
+};
 
 const JWT_SECRET = process.env.JWT_SECRET || '089e675445adbb3429b0cdd26f4953dbaa4c599ae574a0d80e114da15701c323';
 
@@ -184,7 +198,7 @@ const advocateLoginHandler = async (req, res) => {
       return res.status(401).json({ error: 'No advocate account found with this email or phone number.' });
     }
 
-    const matched = users.find(u => u.password === password.trim());
+    const matched = users.find(u => verifyPassword(password.trim(), u.password));
     if (!matched) {
       return res.status(401).json({ error: 'Incorrect password. Please try again.' });
     }
@@ -247,7 +261,7 @@ const clientLoginHandler = async (req, res) => {
       return res.status(401).json({ error: 'No client account found with this email or phone number.' });
     }
 
-    const matched = users.find(u => u.password === password.trim());
+    const matched = users.find(u => verifyPassword(password.trim(), u.password));
     if (!matched) {
       return res.status(401).json({ error: 'Incorrect password. Please try again.' });
     }
@@ -354,8 +368,8 @@ app.post('/api/auth/login-supabase', async (req, res) => {
     if (error) throw error;
 
     if (users && users.length > 0) {
-      // In a real app, passwords should be hashed. Here we compare plain text per legacy DB.
-      const matchedUser = users.find(u => u.password === password.trim() && (role === 'lawyer' ? u.status === 'approved' : true));
+      // In a real app, passwords should be hashed. Here we compare plain text or hash.
+      const matchedUser = users.find(u => verifyPassword(password.trim(), u.password) && (role === 'lawyer' ? u.status === 'approved' : true));
       
       if (matchedUser) {
         const token = jwt.sign(
