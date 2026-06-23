@@ -164,7 +164,11 @@ const LawyerRegistration = () => {
 
       if (!insertError) {
         // Also insert into legacy lawyers table for backward compatibility
-        await supabase.from('lawyers').insert([payload]).catch(e => console.warn('Legacy insert error:', e));
+        try {
+          await supabase.from('lawyers').insert([payload]);
+        } catch (e) {
+          console.warn('Legacy insert error:', e);
+        }
       }
 
       if (insertError) throw insertError;

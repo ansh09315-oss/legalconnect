@@ -108,7 +108,11 @@ const AdminPortal = () => {
       if (error) throw error;
 
       // Sync status to legacy lawyers table for compatibility
-      await supabase.from('lawyers').update({ status }).eq('id', id).catch(() => {});
+      try {
+        await supabase.from('lawyers').update({ status }).eq('id', id);
+      } catch (e) {
+        console.warn('Legacy sync status error:', e);
+      }
       
       // Move to correct state lists
       if (status === 'approved') {
@@ -135,7 +139,11 @@ const AdminPortal = () => {
         if (lawyerErr) throw lawyerErr;
 
         // 3. Delete from legacy table
-        await supabase.from('lawyers').delete().eq('id', id).catch(() => {});
+        try {
+          await supabase.from('lawyers').delete().eq('id', id);
+        } catch (e) {
+          console.warn('Legacy sync delete error:', e);
+        }
 
         setLawyers(prev => prev.filter(l => l.id !== id));
         if (expandedLawyerId === id) setExpandedLawyerId(null);
