@@ -19,6 +19,7 @@ const Login = () => {
   // Shared fields
   const [identifier, setIdentifier] = useState('');   // name or email
   const [password, setPassword] = useState('');
+  const [loginRole, setLoginRole] = useState('client'); // 'client' | 'lawyer'
 
   // Register-only fields
   const [regName, setRegName] = useState('');
@@ -43,127 +44,145 @@ const Login = () => {
     setError('');
     setSuccess('');
 
+    const idLower = identifier.trim().toLowerCase();
+
     try {
       const { supabase } = await import('../lib/supabaseClient');
 
-      let isBackendAvailable = false;
-      
-      // 1. Try Lawyer Login via Backend
-      try {
-        let res = await fetch('/.netlify/functions/api/auth/login-supabase', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ identifier: identifier.trim(), password: password.trim(), role: 'lawyer' })
-        });
-
-        if (res.status === 404) { // Fallback if serverless prefix stripped
-          res = await fetch('/.netlify/functions/api/auth/login-supabase'.replace('/api/auth', '/auth'), {
+      if (loginRole === 'lawyer') {
+        // --- Advocate/Lawyer Login ---
+        try {
+          let res = await fetch('/.netlify/functions/api/auth/login-supabase', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ identifier: identifier.trim(), password: password.trim(), role: 'lawyer' })
           });
+
+          if (res.status === 404) { // Fallback if serverless prefix stripped
+            res = await fetch('/.netlify/functions/api/auth/login-supabase'.replace('/api/auth', '/auth'), {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ identifier: identifier.trim(), password: password.trim(), role: 'lawyer' })
+            });
+          }
+
+          const contentType = res.headers.get('content-type');
+          if (res.ok && contentType && contentType.includes('application/json')) {
+            let data = await res.json();
+            if (data && data.status === 'success') {
+              login(data.token, data.user);
+              localStorage.setItem('lawyerAccount', JSON.stringify(data.user));
+              navigate('/lawyer');
+              return;
+            } else {
+              setError(data?.error || 'Invalid advocate credentials.');
+              setLoading(false);
+              return;
+            }
+          }
+        } catch (backendErr) {
+          console.warn("Backend lawyer login error (falling back to direct Supabase):", backendErr);
         }
 
-        const contentType = res.headers.get('content-type');
-        if (res.ok && contentType && contentType.includes('application/json')) {
-          let data = await res.json();
-          isBackendAvailable = true;
-          if (data && data.status === 'success') {
-            login(data.token, data.user);
-            localStorage.setItem('lawyerAccount', JSON.stringify(data.user)); // Keep for legacy compatibility 
+        // Direct Supabase Fallback for Lawyer
+        const { data: dbLawyers, error: lawyerErr } = await supabase
+          .from('lawyers')
+          .select('*')
+          .or(`email.eq.${idLower},phone.eq.${identifier.trim()}`);
+
+        if (lawyerErr) {
+          console.error("Supabase query error:", lawyerErr);
+        }
+
+        if (dbLawyers && dbLawyers.length > 0) {
+          const matchedLawyer = dbLawyers.find(u => u.password === password.trim());
+          if (matchedLawyer) {
+            if (matchedLawyer.status !== 'approved') {
+              setError('Your advocate account is under review by our admin. Once approved, you can log in.');
+              setLoading(false);
+              return;
+            }
+            const userObj = { ...matchedLawyer, role: 'lawyer' };
+            const mockToken = 'mock_' + btoa(JSON.stringify(userObj));
+            login(mockToken, userObj);
+            localStorage.setItem('lawyerAccount', JSON.stringify(userObj));
             navigate('/lawyer');
             return;
           }
         }
-      } catch (backendErr) {
-        console.warn("Backend lawyer login error (falling back to direct Supabase):", backendErr);
-      }
-
-      // 2. If not lawyer, try Client Login via Backend
-      try {
-        let resClient = await fetch('/.netlify/functions/api/auth/login-supabase', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ identifier: identifier.trim(), password: password.trim(), role: 'client' })
-        });
-
-        if (resClient.status === 404) {
-          resClient = await fetch('/.netlify/functions/api/auth/login-supabase'.replace('/api/auth', '/auth'), {
+        setError('No advocate account found with those credentials. Please check or make sure your application is approved.');
+      } else {
+        // --- Client Login ---
+        try {
+          let resClient = await fetch('/.netlify/functions/api/auth/login-supabase', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ identifier: identifier.trim(), password: password.trim(), role: 'client' })
           });
+
+          if (resClient.status === 404) {
+            resClient = await fetch('/.netlify/functions/api/auth/login-supabase'.replace('/api/auth', '/auth'), {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ identifier: identifier.trim(), password: password.trim(), role: 'client' })
+            });
+          }
+
+          const contentType = resClient.headers.get('content-type');
+          if (resClient.ok && contentType && contentType.includes('application/json')) {
+            let clientData = await resClient.json();
+            if (clientData && clientData.status === 'success') {
+              login(clientData.token, clientData.user);
+              localStorage.setItem('clientAccount', JSON.stringify(clientData.user));
+              navigate('/client');
+              return;
+            } else {
+              setError(clientData?.error || 'Invalid client credentials.');
+              setLoading(false);
+              return;
+            }
+          }
+        } catch (backendErr) {
+          console.warn("Backend client login error (falling back to direct Supabase):", backendErr);
         }
 
-        const contentType = resClient.headers.get('content-type');
-        if (resClient.ok && contentType && contentType.includes('application/json')) {
-          let clientData = await resClient.json();
-          isBackendAvailable = true;
-          if (clientData && clientData.status === 'success') {
-            login(clientData.token, clientData.user);
-            localStorage.setItem('clientAccount', JSON.stringify(clientData.user)); // Keep for legacy
+        // Direct Supabase Fallback for Client
+        const { data: dbClients, error: clientErr } = await supabase
+          .from('clients')
+          .select('*')
+          .or(`email.eq.${idLower},phone.eq.${identifier.trim()}`);
+
+        if (clientErr) {
+          console.error("Supabase query error:", clientErr);
+        }
+
+        if (dbClients && dbClients.length > 0) {
+          const matchedClient = dbClients.find(u => u.password === password.trim());
+          if (matchedClient) {
+            const userObj = { ...matchedClient, role: 'client' };
+            const mockToken = 'mock_' + btoa(JSON.stringify(userObj));
+            login(mockToken, userObj);
+            localStorage.setItem('clientAccount', JSON.stringify(userObj));
             navigate('/client');
             return;
           }
         }
-      } catch (backendErr) {
-        console.warn("Backend client login error (falling back to direct Supabase):", backendErr);
-      }
 
-      // 3. Fallback to Direct Supabase Queries (for local dev mode)
-      const idLower = identifier.trim().toLowerCase();
-
-      // Check lawyers first
-      const { data: dbLawyers, error: lawyerErr } = await supabase
-        .from('lawyers')
-        .select('*')
-        .or(`email.eq.${idLower},phone.eq.${identifier.trim()}`);
-
-      if (!lawyerErr && dbLawyers && dbLawyers.length > 0) {
-        const matchedLawyer = dbLawyers.find(u => u.password === password.trim() && u.status === 'approved');
-        if (matchedLawyer) {
-          const userObj = { ...matchedLawyer, role: 'lawyer' };
-          const mockToken = 'mock_' + btoa(JSON.stringify(userObj));
-          login(mockToken, userObj);
-          localStorage.setItem('lawyerAccount', JSON.stringify(userObj));
-          navigate('/lawyer');
-          return;
+        /* Legacy clientAccount fallback */
+        const legacyStr = localStorage.getItem('clientAccount');
+        if (legacyStr) {
+          const legacy = JSON.parse(legacyStr);
+          if (
+            (legacy.email?.toLowerCase() === idLower || legacy.phone === identifier.trim()) &&
+            (legacy.password === password.trim() || legacy.phone === password.trim())
+          ) {
+            localStorage.setItem('isAuthenticated', 'true');
+            navigate('/client');
+            return;
+          }
         }
+        setError('No client account found with those credentials. Please check and try again.');
       }
-
-      // Check clients next
-      const { data: dbClients, error: clientErr } = await supabase
-        .from('clients')
-        .select('*')
-        .or(`email.eq.${idLower},phone.eq.${identifier.trim()}`);
-
-      if (!clientErr && dbClients && dbClients.length > 0) {
-        const matchedClient = dbClients.find(u => u.password === password.trim());
-        if (matchedClient) {
-          const userObj = { ...matchedClient, role: 'client' };
-          const mockToken = 'mock_' + btoa(JSON.stringify(userObj));
-          login(mockToken, userObj);
-          localStorage.setItem('clientAccount', JSON.stringify(userObj));
-          navigate('/client');
-          return;
-        }
-      }
-
-      /* 4 — Legacy clientAccount (old local storage format fallback) */
-      const legacyStr = localStorage.getItem('clientAccount');
-      if (legacyStr) {
-        const legacy = JSON.parse(legacyStr);
-        if (
-          (legacy.email?.toLowerCase() === idLower || legacy.phone === identifier.trim()) &&
-          (legacy.password === password.trim() || legacy.phone === password.trim())
-        ) {
-          localStorage.setItem('isAuthenticated', 'true');
-          navigate('/client');
-          return;
-        }
-      }
-
-      setError('No account found with those credentials. Please check and try again.');
     } catch (err) {
       console.error(err);
       setError('Something went wrong. Please try again.');
@@ -309,6 +328,34 @@ const Login = () => {
               </button>
             ))}
           </div>
+
+          {/* Role selector for login */}
+          {tab === 'login' && (
+            <div style={{ display: 'flex', gap: 12, marginBottom: 24 }}>
+              {[
+                { id: 'client', label: 'Client Portal', icon: User },
+                { id: 'lawyer', label: 'Advocate Portal', icon: Scale }
+              ].map(roleItem => {
+                const IconComponent = roleItem.icon;
+                const active = loginRole === roleItem.id;
+                return (
+                  <button key={roleItem.id} type="button" onClick={() => setLoginRole(roleItem.id)}
+                    style={{
+                      flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                      padding: '12px 14px', borderRadius: 12, border: '1px solid',
+                      borderColor: active ? 'rgba(0,229,255,0.3)' : 'rgba(255,255,255,0.06)',
+                      background: active ? 'rgba(0,229,255,0.08)' : 'rgba(255,255,255,0.02)',
+                      color: active ? '#00e5ff' : '#64748b', cursor: 'pointer',
+                      transition: 'all 0.2s', fontFamily: 'Inter,sans-serif',
+                      fontWeight: active ? 700 : 500, fontSize: '0.85rem'
+                    }}>
+                    <IconComponent size={16} color={active ? '#00e5ff' : '#64748b'} />
+                    {roleItem.label}
+                  </button>
+                );
+              })}
+            </div>
+          )}
 
           {/* ── LOGIN FORM ── */}
           <AnimatePresence mode="wait">
