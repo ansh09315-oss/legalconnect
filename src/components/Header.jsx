@@ -3,8 +3,10 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Bell, LogOut, User, ChevronDown, Shield } from 'lucide-react';
 import { LawyerAvatar } from './Sidebar';
+import { useAuth } from '../contexts/AuthContext';
 
 const Header = () => {
+  const { logout } = useAuth();
   const [scrolled, setScrolled] = useState(false);
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [lawyer, setLawyer] = useState(null);
@@ -39,7 +41,7 @@ const Header = () => {
 
   const handleLogout = () => {
     localStorage.removeItem('lawyerAccount');
-    localStorage.removeItem('isAuthenticated');
+    logout();
     setDropdownOpen(false);
     navigate('/');
   };

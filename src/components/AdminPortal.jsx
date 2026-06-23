@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../contexts/AuthContext';
 
 /* ─── Avatar helper ─── */
 const Avatar = ({ lawyer, size = 44 }) => {
@@ -62,6 +63,7 @@ const Pill = ({ label, color }) => (
 /* ══════════════════════════════════════ */
 const AdminPortal = () => {
   const navigate = useNavigate();
+  const { logout } = useAuth();
   const [pending, setPending] = useState([]);
   const [cases,   setCases]   = useState([]);
   const [lawyers, setLawyers] = useState([]);
@@ -221,8 +223,7 @@ const AdminPortal = () => {
 
             <motion.button whileHover={{ scale: 1.04 }} whileTap={{ scale: .96 }}
               onClick={() => {
-                localStorage.removeItem('isAuthenticated');
-                localStorage.removeItem('isAdmin');
+                logout();
                 navigate('/');
               }}
               style={{ display: 'flex', alignItems: 'center', gap: 8,

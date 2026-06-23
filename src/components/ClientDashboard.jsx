@@ -372,7 +372,7 @@ const ClientDashboard = () => {
         <header style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between',
           gap:16, marginBottom:40, flexWrap:'wrap' }}>
           <div>
-            <button onClick={() => { localStorage.removeItem('isAuthenticated'); navigate('/'); }}
+            <button onClick={() => { logout(); navigate('/'); }}
               style={{ display:'flex', alignItems:'center', gap:6, background:'transparent', border:'none',
                 color:'#64748b', fontSize:'0.85rem', cursor:'pointer', marginBottom:16, transition:'color .2s' }}
               onMouseOver={e=>e.currentTarget.style.color='white'}
