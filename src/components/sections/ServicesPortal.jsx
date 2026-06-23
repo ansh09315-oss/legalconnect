@@ -426,7 +426,7 @@ const ServicesPortal = () => {
   React.useEffect(() => {
     const fetchLawyers = async () => {
       const { data } = await supabase
-        .from('lawyers')
+        .from('lawyer_profiles')
         .select('*')
         .eq('status', 'approved');
       if (data) setLawyersList(data);

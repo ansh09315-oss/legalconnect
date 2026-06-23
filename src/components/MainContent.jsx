@@ -153,7 +153,7 @@ const MainContent = () => {
       // Re-fetch from Supabase to get latest data incl. photo_url
       try {
         const { data } = await supabase
-          .from('lawyers')
+          .from('lawyer_profiles')
           .select('*')
           .eq('id', user.id)
           .single();

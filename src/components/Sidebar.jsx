@@ -66,7 +66,7 @@ const Sidebar = () => {
     // Re-fetch from Supabase to get latest photo_url and other fields
     import('../lib/supabaseClient').then(({ supabase }) => {
       supabase
-        .from('lawyers')
+        .from('lawyer_profiles')
         .select('*')
         .eq('id', parsed.id)
         .single()

@@ -149,7 +149,7 @@ const ClientDashboard = () => {
     setLoadingLawyers(true);
     try {
       const { data, error } = await supabase
-        .from('lawyers')
+        .from('lawyer_profiles')
         .select('*')
         .eq('status', 'approved');
       if (data) setLawyers(data);
@@ -256,7 +256,7 @@ const ClientDashboard = () => {
         .eq('client_phone', parsedClient.phone);
 
       if (dbCases && dbCases.length > 0) {
-        const { data: lawyers } = await supabase.from('lawyers').select('*');
+        const { data: lawyers } = await supabase.from('lawyer_profiles').select('*');
         const mappedCases = dbCases.map((c, idx) => {
           const lawyer = lawyers?.find(l => l.id === c.lawyer_id) || {};
           return {
