@@ -2,35 +2,41 @@
 
 /* ─── Tailwind v4: CSS-first theme ─── */
 @theme {
-  --color-legal-navy:          #050A14;
-  --color-legal-cyan:          #00e5ff;
-  --color-legal-silver:        #94a3b8;
-  --color-legal-dark:          #04080f;
-  --color-legal-surface:       rgba(26, 28, 35, 0.6);
-  --color-legal-surfacelighter: rgba(40, 42, 52, 0.8);
+  --color-legal-navy:          #08080a;
+  --color-legal-cyan:          #d4d4d8;
+  --color-legal-silver:        #71717a;
+  --color-legal-dark:          #09090b;
+  --color-legal-surface:       rgba(24, 24, 27, 0.6);
+  --color-legal-surfacelighter: rgba(39, 39, 42, 0.8);
 
-  --font-sans:    "Inter", sans-serif;
-  --font-display: "Outfit", sans-serif;
+  --font-sans:    "Plus Jakarta Sans", sans-serif;
+  --font-display: "Space Grotesk", sans-serif;
 
   --animate-glow-pulse: glow-pulse 3s infinite alternate;
+  --animate-float-gravity: antiGravityFloat 6s ease-in-out infinite;
 
   @keyframes glow-pulse {
-    0%   { box-shadow: 0 0 10px 0px rgba(0, 229, 255, 0.2); }
-    100% { box-shadow: 0 0 20px 5px rgba(0, 229, 255, 0.6); }
+    0%   { box-shadow: 0 0 10px 0px rgba(255, 255, 255, 0.05); }
+    100% { box-shadow: 0 0 15px 3px rgba(255, 255, 255, 0.15); }
+  }
+
+  @keyframes antiGravityFloat {
+    0%, 100% { transform: translateY(0px); }
+    50% { transform: translateY(-8px); }
   }
 }
 
 /* ─── Base ─── */
 html, body {
-  background-color: #050A14;
-  color: #f8fafc;
-  font-family: "Inter", sans-serif;
+  background-color: #08080a;
+  color: #fafafa;
+  font-family: "Plus Jakarta Sans", sans-serif;
   overflow-x: hidden;
   scroll-behavior: smooth;
 }
 
 h1, h2, h3, h4, h5, h6 {
-  font-family: "Outfit", sans-serif;
+  font-family: "Space Grotesk", sans-serif;
   letter-spacing: -0.02em;
 }
 

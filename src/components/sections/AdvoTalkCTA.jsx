@@ -1,38 +1,10 @@
 import React, { useRef, useState, useEffect } from 'react';
 import axios from 'axios';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Canvas, useFrame } from '@react-three/fiber';
-import { Float } from '@react-three/drei';
 import { MessageCircle, Clock, Wallet, Handshake, ArrowRight, X, Mic, Send, CheckCircle2, Lock } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 
-function ConsultBubble() {
-  const groupRef = useRef();
-  useFrame((state) => {
-    if (groupRef.current) {
-      groupRef.current.rotation.y = Math.sin(state.clock.elapsedTime * 0.5) * 0.2;
-    }
-  });
-  return (
-    <Float speed={2} floatIntensity={1.5}>
-      <group ref={groupRef}>
-        <mesh position={[0, 0, 0]}>
-          <sphereGeometry args={[1.4, 32, 32]} />
-          <meshStandardMaterial color="#00e5ff" emissive="#007080" emissiveIntensity={0.6} roughness={0.2} metalness={0.8} transparent opacity={0.9} />
-        </mesh>
-        <mesh position={[0, 0, 0]}>
-          <torusGeometry args={[1.8, 0.05, 16, 100]} />
-          <meshStandardMaterial color="#00e5ff" emissive="#00e5ff" emissiveIntensity={1} transparent opacity={0.4} />
-        </mesh>
-        <mesh position={[0, 0, 1.5]}>
-          <cylinderGeometry args={[0.1, 0.13, 0.4, 16]} />
-          <meshStandardMaterial color="#ffffff" />
-        </mesh>
-      </group>
-    </Float>
-  );
-}
 
 const features = [
   { icon: Handshake, label: 'Expert Consultation', color: '#00e5ff' },

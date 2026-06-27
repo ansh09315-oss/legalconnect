@@ -1,6 +1,4 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Canvas } from '@react-three/fiber';
-import { Environment, PresentationControls, Float } from '@react-three/drei';
 import {
   CheckCircle, XCircle, Send, Briefcase, Clock, Activity,
   MessageSquare, Paperclip, MoreVertical, Circle, RefreshCw, AlertCircle
@@ -9,50 +7,6 @@ import { supabase } from '../lib/supabaseClient';
 import { useAuth } from '../contexts/AuthContext';
 import { LawyerAvatar } from './Sidebar';
 
-/* ──────────────────────────────────────────
-   3-D background scene
-────────────────────────────────────────── */
-function Header3DScene() {
-  return (
-    <Canvas camera={{ position: [0, 2, 7], fov: 45 }}>
-      <ambientLight intensity={0.4} />
-      <spotLight position={[10, 10, 10]} angle={0.3} penumbra={1} intensity={1.5} castShadow />
-      <pointLight position={[-10, -10, -10]} intensity={0.5} color="#00e5ff" />
-      <Environment preset="city" />
-      <PresentationControls global rotation={[0, -0.2, 0]} polar={[-0.1, 0.2]} azimuth={[-0.5, 0.5]}>
-        <Float rotationIntensity={0.5} floatIntensity={1} speed={1.5}>
-          <group position={[0, -0.5, 0]}>
-            <mesh position={[0, 0, 0]}>
-              <cylinderGeometry args={[3.5, 3.8, 0.2, 64]} />
-              <meshStandardMaterial color="#0a0a0c" metalness={0.9} roughness={0.1} />
-            </mesh>
-            <mesh position={[0, 0.15, 0]}>
-              <cylinderGeometry args={[3.3, 3.5, 0.1, 64]} />
-              <meshStandardMaterial color="#1a1c24" metalness={0.8} roughness={0.2} />
-            </mesh>
-            <mesh position={[0, 0.3, 0]} rotation={[Math.PI / 2, 0, 0]}>
-              <torusGeometry args={[2.5, 0.02, 16, 100]} />
-              <meshBasicMaterial color="#00e5ff" transparent opacity={0.6} />
-            </mesh>
-            <mesh position={[0, 2, 0]}>
-              <octahedronGeometry args={[1.2, 0]} />
-              <meshPhysicalMaterial color="#ffffff" transmission={0.95} roughness={0}
-                ior={1.5} thickness={1} clearcoat={1} clearcoatRoughness={0.1} />
-            </mesh>
-            <mesh position={[-2.5, 1.5, 1.5]}>
-              <icosahedronGeometry args={[0.3, 0]} />
-              <meshPhysicalMaterial color="#00e5ff" transmission={0.8} roughness={0.2} ior={1.4} />
-            </mesh>
-            <mesh position={[2.5, 2.5, -1.5]}>
-              <icosahedronGeometry args={[0.4, 0]} />
-              <meshPhysicalMaterial color="#818cf8" transmission={0.8} roughness={0.2} ior={1.4} />
-            </mesh>
-          </group>
-        </Float>
-      </PresentationControls>
-    </Canvas>
-  );
-}
 
 /* ──────────────────────────────────────────
    MainContent
@@ -241,8 +195,20 @@ const MainContent = () => {
         background: 'radial-gradient(circle at center, #1a1c24 0%, #050A14 100%)',
         border: '1px solid rgba(255,255,255,0.05)', boxShadow: '0 20px 40px rgba(0,0,0,0.4)' }}>
 
-        {/* 3-D canvas fills right side */}
-        <div style={{ position: 'absolute', inset: 0 }}><Header3DScene /></div>
+        {/* 3-D canvas replacement - premium cyber static visual */}
+        <div style={{ position: 'absolute', inset: 0, overflow: 'hidden', pointerEvents: 'none' }}>
+          {/* Ambient glows */}
+          <div style={{ position: 'absolute', right: '-10%', top: '-20%', width: '400px', height: '400px', borderRadius: '50%', background: 'radial-gradient(circle, rgba(0,229,255,0.08) 0%, transparent 70%)' }} />
+          <div style={{ position: 'absolute', right: '15%', bottom: '-10%', width: '300px', height: '300px', borderRadius: '50%', background: 'radial-gradient(circle, rgba(129,140,248,0.08) 0%, transparent 70%)' }} />
+          
+          {/* Futuristic Tech Grid inside the header */}
+          <div className="absolute inset-0 bg-[linear-gradient(to_right,rgba(0,229,255,0.015)_1px,transparent_1px),linear-gradient(to_bottom,rgba(0,229,255,0.015)_1px,transparent_1px)] bg-[size:3rem_3rem] pointer-events-none" />
+          
+          {/* Glowing cyber lines / neon nodes */}
+          <div style={{ position: 'absolute', top: '25%', right: '15%', width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#00e5ff', boxShadow: '0 0 15px 4px #00e5ff' }} />
+          <div style={{ position: 'absolute', top: '65%', right: '25%', width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#818cf8', boxShadow: '0 0 12px 3px #818cf8' }} />
+          <div style={{ position: 'absolute', top: '40%', right: '35%', width: '5px', height: '5px', borderRadius: '50%', backgroundColor: '#00e5ff', opacity: 0.6 }} />
+        </div>
 
         {/* Gradient overlay for readability */}
         <div style={{ position: 'absolute', inset: 0,

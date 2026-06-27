@@ -1,12 +1,12 @@
-import React, { useRef, useState } from 'react';
+import React, { useRef, useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import axios from 'axios';
 import { motion, useScroll, useTransform, AnimatePresence } from 'framer-motion';
-import { Canvas, useFrame } from '@react-three/fiber';
-import { Float } from '@react-three/drei';
-import { Scale, Building2, Briefcase, User, Star, ArrowRight, ChevronLeft, X, Mail, Phone, MapPin, Award, CheckCircle2, Lock, Send } from 'lucide-react';
+import { Scale, Building2, Briefcase, User, Star, ArrowRight, ChevronLeft, X, Mail, Phone, MapPin, Award, CheckCircle2, Lock, Send, Users, Sparkles } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabaseClient';
 import { useAuth } from '../../contexts/AuthContext';
+
 
 const caseTypes = [
   {
@@ -16,14 +16,17 @@ const caseTypes = [
     description: 'Bail, trials, FIRs, and criminal defense handled by top advocates.',
     count: '1.2k+ cases',
     color: '#00e5ff',
+    // Homepage alias: "Criminal Defense"
+    aliases: ['criminal', 'defense'],
   },
   {
     id: 1,
     icon: User,
-    title: 'Civil Disputes',
-    description: 'Property, family, and civil suits resolved by specialized attorneys.',
+    title: 'Family Law',
+    description: 'Divorce, child custody, adoption, and matrimonial disputes handled with care.',
     count: '890+ cases',
-    color: '#818cf8',
+    color: '#f472b6',
+    aliases: ['family'],
   },
   {
     id: 2,
@@ -32,6 +35,7 @@ const caseTypes = [
     description: 'Business formations, mergers, compliance, and IP protection.',
     count: '2.1k+ cases',
     color: '#34d399',
+    aliases: ['corporate', 'startup'],
   },
   {
     id: 3,
@@ -40,6 +44,25 @@ const caseTypes = [
     description: 'Employment disputes, wrongful termination, and HR compliance.',
     count: '560+ cases',
     color: '#f59e0b',
+    aliases: ['labour', 'labor'],
+  },
+  {
+    id: 4,
+    icon: Building2,
+    title: 'Property Law',
+    description: 'Title verification, sale deed drafting, RERA complaints, and landlord-tenant litigation.',
+    count: '430+ cases',
+    color: '#a78bfa',
+    aliases: ['property', 'real estate'],
+  },
+  {
+    id: 5,
+    icon: User,
+    title: 'Civil Disputes',
+    description: 'Civil suits, injunctions, and recovery cases resolved by specialized attorneys.',
+    count: '670+ cases',
+    color: '#818cf8',
+    aliases: ['civil'],
   },
 ];
 
@@ -324,54 +347,7 @@ const LawyerProfileModal = ({ lawyer, onClose }) => {
   );
 };
 
-function LawyerOrb({ lawyer, index, total, onClick }) {
-  const angle = (index / (total || 1)) * Math.PI * 2;
-  const radius = 3;
-  const x = Math.cos(angle) * radius;
-  const z = Math.sin(angle) * radius;
-  const meshRef = useRef();
 
-  useFrame((state) => {
-    if (meshRef.current) {
-      meshRef.current.position.y = Math.sin(state.clock.elapsedTime + index) * 0.2;
-    }
-  });
-
-  return (
-    <Float speed={1.5} floatIntensity={0.5}>
-      <mesh ref={meshRef} position={[x, 0, z]} onClick={onClick}>
-        <sphereGeometry args={[0.5, 32, 32]} />
-        <meshStandardMaterial
-          color="#00e5ff"
-          emissive="#00a0b0"
-          emissiveIntensity={0.4}
-          roughness={0.1}
-          metalness={0.8}
-        />
-      </mesh>
-    </Float>
-  );
-}
-
-function LawyerGalaxy({ onSelect, lawyersList }) {
-  const groupRef = useRef();
-  useFrame((state) => {
-    if (groupRef.current) {
-      groupRef.current.rotation.y = state.clock.elapsedTime * 0.1;
-    }
-  });
-  return (
-    <group ref={groupRef}>
-      {lawyersList.map((lawyer, i) => (
-        <LawyerOrb key={lawyer.id} lawyer={lawyer} index={i} total={lawyersList.length} onClick={() => onSelect(lawyer)} />
-      ))}
-      <mesh>
-        <sphereGeometry args={[0.3, 16, 16]} />
-        <meshStandardMaterial color="#050A14" emissive="#00e5ff" emissiveIntensity={1} />
-      </mesh>
-    </group>
-  );
-}
 
 const ServiceCard = ({ caseType, onClick }) => {
   const Icon = caseType.icon;
@@ -411,28 +387,65 @@ const ServiceCard = ({ caseType, onClick }) => {
 const ServicesPortal = () => {
   const sectionRef = useRef();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [selectedCategory, setSelectedCategory] = useState(null);
   const [selectedLawyer, setSelectedLawyer] = useState(null);
   const [lawyersList, setLawyersList] = useState([]);
+  const [loading, setLoading] = useState(false);
   
   const { scrollYProgress } = useScroll({ target: sectionRef, offset: ['start end', 'end start'] });
   const xOffset = useTransform(scrollYProgress, [0, 1], ['10%', '-10%']);
 
-  // Allow browsing categories without login
+  // ── Auto-open category from URL query param (e.g. ?category=Family+Law) ──
+  useEffect(() => {
+    const param = searchParams.get('category');
+    if (!param) return;
+    const matched = caseTypes.find(ct =>
+      ct.title.toLowerCase() === param.toLowerCase() ||
+      (ct.aliases || []).some(a => param.toLowerCase().includes(a))
+    );
+    if (matched) {
+      setSelectedCategory(matched);
+      // Scroll into view smoothly
+      setTimeout(() => {
+        document.getElementById('services')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }, 150);
+    }
+  }, [searchParams]);
+
   const handleCategoryClick = (caseType) => {
     setSelectedCategory(caseType);
+    // Reflect in URL so browser back button works
+    setSearchParams({ category: caseType.title });
   };
 
-  React.useEffect(() => {
+  const handleBackToCategories = () => {
+    setSelectedCategory(null);
+    setSearchParams({});
+  };
+
+  // Fetch approved lawyers whenever a category is opened
+  useEffect(() => {
+    if (!selectedCategory) return;
     const fetchLawyers = async () => {
+      setLoading(true);
       const { data } = await supabase
         .from('lawyer_profiles')
         .select('*')
         .eq('status', 'approved');
       if (data) setLawyersList(data);
+      setLoading(false);
     };
     fetchLawyers();
-  }, [selectedCategory]); // Refetch when a user opens a category to see latest approved lawyers
+  }, [selectedCategory]);
+
+  // Match lawyers against selected category using title + aliases
+  const filteredLawyers = lawyersList.filter(l => {
+    if (!selectedCategory || !l.spec) return false;
+    const spec = l.spec.toLowerCase();
+    const aliases = [selectedCategory.title.toLowerCase(), ...(selectedCategory.aliases || [])];
+    return aliases.some(a => spec.includes(a.split(' ')[0]));
+  });
 
   return (
     <section ref={sectionRef} id="services" className="py-24 bg-legal-navy overflow-hidden">
@@ -473,56 +486,121 @@ const ServicesPortal = () => {
           </motion.div>
         ) : (
           <motion.div
-            key="galaxy"
-            initial={{ opacity: 0, scale: 0.9 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.9 }}
-            transition={{ duration: 0.6, type: 'spring' }}
+            key="category-view"
+            initial={{ opacity: 0, y: 30 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -30 }}
+            transition={{ duration: 0.4 }}
             className="px-6"
           >
             <div className="max-w-7xl mx-auto">
-              <button
-                onClick={() => setSelectedCategory(null)}
-                className="interactive flex items-center gap-2 text-legal-cyan text-sm mb-8 hover:opacity-80 transition-opacity"
-              >
-                <ChevronLeft size={16} /> Back to Categories
-              </button>
-              <div className="grid md:grid-cols-2 gap-8 items-center">
-                <div className="h-80 md:h-[400px] rounded-2xl overflow-hidden relative group">
-                  <Canvas camera={{ position: [0, 2, 8], fov: 50 }}>
-                    <ambientLight intensity={0.4} />
-                    <pointLight position={[0, 0, 0]} intensity={1} color="#00e5ff" />
-                    <LawyerGalaxy onSelect={setSelectedLawyer} lawyersList={lawyersList} />
-                  </Canvas>
-                  <div className="absolute top-4 left-4 bg-black/40 backdrop-blur-md px-3 py-1.5 rounded-lg border border-white/10 text-[10px] text-slate-400 uppercase tracking-widest pointer-events-none">
-                    Select an orb to view profile
+              
+              {/* Premium Back Button & Header */}
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-10 pb-6 border-b border-white/5">
+                <div className="flex items-center gap-4">
+                  <button
+                    onClick={handleBackToCategories}
+                    className="interactive flex items-center justify-center w-10 h-10 rounded-xl bg-white/5 border border-white/10 text-legal-cyan hover:bg-legal-cyan/10 hover:border-legal-cyan/30 transition-all"
+                  >
+                    <ChevronLeft size={20} />
+                  </button>
+                  <div>
+                    <div className="flex items-center gap-2 text-xs text-slate-500 uppercase tracking-widest font-bold">
+                      <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: selectedCategory.color }} />
+                      Legal Connect Portal / Specialization
+                    </div>
+                    <h3 className="text-2xl md:text-3xl font-display font-bold text-white mt-1 flex items-center gap-3">
+                      {selectedCategory.title}
+                    </h3>
                   </div>
                 </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  {lawyersList.map((lawyer, i) => (
+                
+                <div className="flex items-center gap-3 px-4 py-2.5 rounded-xl bg-white/5 border border-white/10">
+                  <Users size={16} className="text-legal-cyan" />
+                  <span className="text-xs text-slate-300 font-medium">
+                    {filteredLawyers.length} Advocate{filteredLawyers.length === 1 ? '' : 's'} available
+                  </span>
+                </div>
+              </div>
+
+              {/* Spacious Grid Layout */}
+              {filteredLawyers.length > 0 ? (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                  {filteredLawyers.map((lawyer, i) => (
                     <motion.div
                       key={lawyer.id}
                       initial={{ opacity: 0, y: 20 }}
                       animate={{ opacity: 1, y: 0 }}
-                      transition={{ delay: i * 0.08 }}
-                      className="interactive glass-card p-4 rounded-xl cursor-pointer group hover:border-legal-cyan/40"
+                      transition={{ delay: i * 0.05 }}
+                      className="interactive glass-card p-6 rounded-2xl cursor-pointer group hover:border-legal-cyan/40 flex flex-col justify-between min-h-[180px] bg-slate-950/40 relative overflow-hidden"
                       onClick={() => setSelectedLawyer(lawyer)}
                     >
-                      <div className="w-10 h-10 rounded-full bg-gradient-to-br from-legal-cyan/30 to-indigo-500/30 border border-legal-cyan/20 flex items-center justify-center mb-2 text-sm font-bold text-legal-cyan group-hover:scale-110 transition-transform">
-                        {lawyer.name.split(' ').map(n => n[0]).join('')}
-                      </div>
-                      <p className="text-white text-sm font-semibold truncate uppercase">{lawyer.name}</p>
-                      <p className="text-legal-cyan text-[10px] font-medium truncate mb-2">{lawyer.spec}</p>
-                      <div className="flex items-center justify-between mt-auto">
-                        <div className="flex items-center gap-1">
-                          <Star size={11} className="text-amber-400 fill-amber-400" />
-                          <span className="text-xs text-slate-300">{lawyer.rating}</span>
+                      {/* Subtle card backglow */}
+                      <div className="absolute top-0 right-0 w-24 h-24 bg-legal-cyan/5 rounded-full blur-2xl pointer-events-none group-hover:bg-legal-cyan/10 transition-all duration-300" />
+                      
+                      <div>
+                        <div className="flex items-center justify-between mb-4">
+                          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-legal-cyan/30 to-indigo-500/30 border border-legal-cyan/20 flex items-center justify-center text-sm font-bold text-legal-cyan group-hover:scale-110 transition-transform">
+                            {lawyer.name.split(' ').map(n => n[0]).join('')}
+                          </div>
+                          <div className="flex items-center gap-1 bg-white/5 border border-white/10 px-2 py-0.5 rounded-md">
+                            <Star size={11} className="text-amber-400 fill-amber-400" />
+                            <span className="text-xs text-slate-300 font-bold">{lawyer.rating || '4.8'}</span>
+                          </div>
                         </div>
+                        <h4 className="text-white text-sm font-bold truncate uppercase tracking-wider group-hover:text-legal-cyan transition-colors">{lawyer.name}</h4>
+                        <p className="text-legal-cyan text-[10px] font-semibold tracking-wide truncate uppercase mt-0.5">{lawyer.spec}</p>
+                      </div>
+                      
+                      <div className="flex items-center justify-between border-t border-white/5 pt-3 mt-4">
+                        <span className="text-[9px] text-slate-500 uppercase tracking-widest font-bold">Consult Profile</span>
+                        <ArrowRight size={12} className="text-slate-500 group-hover:text-legal-cyan group-hover:translate-x-1 transition-all" />
                       </div>
                     </motion.div>
                   ))}
                 </div>
-              </div>
+              ) : (
+                <div className="py-16 text-center bg-white/5 border border-white/10 rounded-3xl p-8 backdrop-blur-sm max-w-3xl mx-auto">
+                  <div className="w-16 h-16 rounded-full bg-slate-900 border border-white/10 flex items-center justify-center mx-auto mb-6 text-slate-500">
+                    <Users size={28} />
+                  </div>
+                  <h4 className="text-lg font-bold text-white mb-2">No Specialization Matches Found</h4>
+                  <p className="text-slate-400 text-sm leading-relaxed mb-8 max-w-md mx-auto">
+                    We don't have advocates matching <strong>{selectedCategory.title}</strong> right now. However, you can consult with any of our other verified legal experts below:
+                  </p>
+                  
+                  <div className="border-t border-white/5 pt-8">
+                    <p className="text-xs font-bold text-legal-cyan tracking-widest uppercase mb-6 flex items-center justify-center gap-2">
+                      <Sparkles size={12} /> Showing All Active Advocates <Sparkles size={12} />
+                    </p>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 text-left">
+                      {lawyersList.map((lawyer, i) => (
+                        <motion.div
+                          key={lawyer.id}
+                          initial={{ opacity: 0, y: 15 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          transition={{ delay: i * 0.05 }}
+                          className="interactive glass-card p-5 rounded-xl cursor-pointer group hover:border-legal-cyan/40 flex flex-col justify-between bg-slate-950/40 relative overflow-hidden"
+                          onClick={() => setSelectedLawyer(lawyer)}
+                        >
+                          <div className="flex items-center justify-between mb-3">
+                            <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-legal-cyan/30 to-indigo-500/30 border border-legal-cyan/20 flex items-center justify-center text-xs font-bold text-legal-cyan">
+                              {lawyer.name.split(' ').map(n => n[0]).join('')}
+                            </div>
+                            <div className="flex items-center gap-1 bg-white/5 border border-white/10 px-2 py-0.5 rounded-md">
+                              <Star size={10} className="text-amber-400 fill-amber-400" />
+                              <span className="text-[10px] text-slate-300 font-bold">{lawyer.rating || '4.8'}</span>
+                            </div>
+                          </div>
+                          <h4 className="text-white text-xs font-bold truncate uppercase tracking-wider group-hover:text-legal-cyan transition-colors">{lawyer.name}</h4>
+                          <p className="text-legal-cyan text-[9px] font-semibold tracking-wide truncate uppercase mt-0.5">{lawyer.spec}</p>
+                        </motion.div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+
             </div>
           </motion.div>
         )}
