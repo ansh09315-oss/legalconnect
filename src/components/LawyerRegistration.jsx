@@ -89,31 +89,34 @@ const LawyerRegistration = () => {
 
     setIsSubmitting(true);
     try {
-      // ── Uniqueness check for email and phone ──
-      const { data: existing, error: checkErr } = await supabase
-        .from('lawyer_profiles')
-        .select('id, email, phone')
-        .or(`email.eq.${data.email.trim()},phone.eq.${data.phone.trim()}`);
+      // ── Uniqueness check for email and phone (safe separate queries) ──
+      try {
+        const { data: emailCheck } = await supabase
+          .from('lawyers')
+          .select('id')
+          .eq('email', data.email.trim().toLowerCase())
+          .maybeSingle();
 
-      if (checkErr) {
-        console.error('Check error:', checkErr);
-        setError('Failed to check existing accounts. Please try again.');
-        setIsSubmitting(false);
-        return;
-      }
-
-      if (existing && existing.length > 0) {
-        const emailMatch = existing.some(l => l.email?.toLowerCase() === data.email.trim().toLowerCase());
-        const phoneMatch = existing.some(l => l.phone === data.phone.trim());
-        if (emailMatch && phoneMatch) {
-          setError('An advocate account with this email and phone number already exists.');
-        } else if (emailMatch) {
+        if (emailCheck) {
           setError('An advocate account with this email already exists.');
-        } else {
-          setError('An advocate account with this phone number already exists.');
+          setIsSubmitting(false);
+          return;
         }
-        setIsSubmitting(false);
-        return;
+
+        const { data: phoneCheck } = await supabase
+          .from('lawyers')
+          .select('id')
+          .eq('phone', data.phone.trim())
+          .maybeSingle();
+
+        if (phoneCheck) {
+          setError('An advocate account with this phone number already exists.');
+          setIsSubmitting(false);
+          return;
+        }
+      } catch (checkErr) {
+        // If duplicate check fails (RLS/network), continue — DB unique constraint will catch real duplicates
+        console.warn('Duplicate pre-check skipped:', checkErr?.message);
       }
 
       let photoUrl = null;
@@ -160,18 +163,23 @@ const LawyerRegistration = () => {
       if (data.password) payload.password = data.password;
       if (photoUrl) payload.photo_url = photoUrl;
 
-      let { error: insertError } = await supabase.from('lawyer_profiles').insert([payload]);
-
-      if (!insertError) {
-        // Also insert into legacy lawyers table for backward compatibility
-        try {
-          await supabase.from('lawyers').insert([payload]);
-        } catch (e) {
-          console.warn('Legacy insert error:', e);
-        }
+      // Call serverless API for advocate registration
+      let res = await fetch('/.netlify/functions/api/auth/register-advocate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      if (res.status === 404) {
+        res = await fetch('/api/auth/register-advocate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
       }
-
-      if (insertError) throw insertError;
+      const dataJson = await res.json();
+      if (!res.ok) {
+        throw new Error(dataJson.error || 'Server registration failed.');
+      }
 
       setSuccess(true);
     } catch (err) {

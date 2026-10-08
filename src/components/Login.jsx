@@ -8,20 +8,6 @@ import {
 import Header from './Header';
 import { supabase } from '../lib/supabaseClient';
 import { useAuth } from '../contexts/AuthContext';
-import bcrypt from 'bcryptjs';
-
-const verifyPassword = (inputPassword, storedPassword) => {
-  if (!storedPassword) return false;
-  if (storedPassword === inputPassword) return true;
-  if (storedPassword.startsWith('$2a$') || storedPassword.startsWith('$2b$') || storedPassword.startsWith('$2y$')) {
-    try {
-      return bcrypt.compareSync(inputPassword, storedPassword);
-    } catch (e) {
-      console.error('Bcrypt comparison failed:', e);
-    }
-  }
-  return false;
-};
 
 /* ──────────────────────────────────────────
    Shared small helpers
@@ -144,38 +130,23 @@ const AdvocateLoginForm = ({ onSuccess, onError }) => {
         }
       } catch (_) { /* fall through to direct Supabase */ }
 
-      // 2. Direct Supabase fallback (dev mode)
-      const { data: rows, error: dbErr } = await supabase
-        .from('lawyer_profiles')
-        .select('*')
-        .or(`email.eq.${idLower},phone.eq.${identifier.trim()}`);
-
-      // Also check legacy 'lawyers' table
+      // 2. Direct Supabase fallback (dev mode) - ONLY checks if account exists
+      // Password verification MUST happen on backend for security
       const { data: legacyRows } = await supabase
         .from('lawyers')
-        .select('*')
+        .select('id, email, phone, status')
         .or(`email.eq.${idLower},phone.eq.${identifier.trim()}`);
 
-      const allRows = [...(rows || []), ...(legacyRows || [])];
-
-      if (allRows.length > 0) {
-        const matched = allRows.find(u => verifyPassword(password.trim(), u.password));
-        if (matched) {
-          if (matched.status !== 'approved') {
-            setError('Your advocate account is pending admin approval. You will be notified once verified.');
-            setLoading(false);
-            return;
-          }
-          const userObj = { ...matched, role: 'lawyer' };
-          const mockToken = 'mock_' + btoa(JSON.stringify(userObj));
-          login(mockToken, userObj);
-          localStorage.setItem('lawyerAccount', JSON.stringify(userObj));
-          navigate('/lawyer');
-          return;
+      if (legacyRows && legacyRows.length > 0) {
+        // Account exists, but backend authentication failed
+        const account = legacyRows[0];
+        if (account.status !== 'approved') {
+          setError('Your advocate account is pending admin approval. You will be notified once verified.');
+        } else {
+          setError('Incorrect password. Please try again.');
         }
-        setError('Incorrect password. Please try again.');
       } else {
-        setError('No advocate account found with this email or phone number.');
+        setError('No advocate account found with this email or phone number. Please register first.');
       }
     } catch (err) {
       console.error(err);
@@ -301,32 +272,18 @@ const ClientForm = () => {
         }
       } catch (_) { /* fall through */ }
 
-      // 2. Direct Supabase fallback (dev mode) — check both new and legacy tables
-      const { data: newRows } = await supabase
-        .from('client_profiles')
-        .select('*')
-        .or(`email.eq.${idLower},phone.eq.${identifier.trim()}`);
-
+      // 2. Direct Supabase fallback (dev mode) - ONLY checks if account exists
+      // Password verification MUST happen on backend for security
       const { data: legacyRows } = await supabase
         .from('clients')
-        .select('*')
+        .select('id, email, phone')
         .or(`email.eq.${idLower},phone.eq.${identifier.trim()}`);
 
-      const allRows = [...(newRows || []), ...(legacyRows || [])];
-
-      if (allRows.length > 0) {
-        const matched = allRows.find(u => verifyPassword(password.trim(), u.password));
-        if (matched) {
-          const userObj = { ...matched, role: 'client' };
-          const mockToken = 'mock_' + btoa(JSON.stringify(userObj));
-          login(mockToken, userObj);
-          localStorage.setItem('clientAccount', JSON.stringify(userObj));
-          navigate('/client');
-          return;
-        }
+      if (legacyRows && legacyRows.length > 0) {
+        // Account exists, but backend authentication failed
         setError('Incorrect password. Please try again.');
       } else {
-        setError('No client account found with this email or phone number.');
+        setError('No client account found with this email or phone number. Please register first.');
       }
     } catch (err) {
       console.error(err);
@@ -349,47 +306,46 @@ const ClientForm = () => {
 
     setLoading(true);
     try {
-      // Check for duplicate in both tables
-      const { data: existingNew } = await supabase
-        .from('client_profiles')
-        .select('id')
-        .or(`email.eq.${regEmail.trim().toLowerCase()},phone.eq.${regPhone.trim()}`);
-
-      const { data: existingLegacy } = await supabase
-        .from('clients')
-        .select('id')
-        .or(`email.eq.${regEmail.trim().toLowerCase()},phone.eq.${regPhone.trim()}`);
-
-      if ((existingNew?.length || 0) + (existingLegacy?.length || 0) > 0) {
-        setError('An account with this phone or email already exists. Please sign in.');
-        setLoading(false);
-        return;
-      }
-
-      const newClient = {
+      // Use backend API for registration to ensure password hashing
+      const payload = {
         name: regName.trim(),
         email: regEmail.trim(),
         phone: regPhone.trim(),
         password: regPassword.trim(),
       };
 
-      // Insert into new client_profiles table
-      const { error: insertErr } = await supabase
-        .from('client_profiles')
-        .insert([newClient]);
+      let res = await fetch('/.netlify/functions/api/auth/register-client', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
 
-      // Also insert into legacy clients table for backwards compatibility
-      await supabase.from('clients').insert([newClient]).then(() => {});
+      if (res.status === 404) {
+        res = await fetch('/api/auth/register-client', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+      }
 
-      if (insertErr) throw insertErr;
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'Registration failed');
+      }
 
-      // Auto-login after registration
-      const userObj = { ...newClient, role: 'client' };
-      const mockToken = 'mock_' + btoa(JSON.stringify(userObj));
-      login(mockToken, userObj);
-      localStorage.setItem('clientAccount', JSON.stringify(userObj));
-      setSuccess('Account created! Redirecting to your dashboard…');
-      setTimeout(() => navigate('/client'), 1200);
+      if (data.status !== 'success') {
+        throw new Error(data.error || 'Registration failed');
+      }
+
+      // Auto-login after successful registration
+      if (data.token && data.user) {
+        login(data.token, data.user);
+        localStorage.setItem('clientAccount', JSON.stringify(data.user));
+        setSuccess('Account created! Redirecting to your dashboard…');
+        setTimeout(() => navigate('/client'), 1200);
+      } else {
+        throw new Error('Registration succeeded but login failed. Please sign in manually.');
+      }
     } catch (err) {
       console.error(err);
       setError('Registration failed. Please try again.');

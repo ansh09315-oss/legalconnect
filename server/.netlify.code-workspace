@@ -1,0 +1,25 @@
+{
+	"folders": [
+		{
+			"path": "../.netlify"
+		},
+		{
+			"path": "../dist"
+		},
+		{
+			"path": "../netlify"
+		},
+		{
+			"path": "../node_modules"
+		},
+		{
+			"path": "../public"
+		},
+		{
+			"path": "."
+		},
+		{
+			"path": "../src"
+		}
+	]
+}

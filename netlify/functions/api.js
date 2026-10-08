@@ -178,13 +178,13 @@ const advocateLoginHandler = async (req, res) => {
 
     const id = identifier.trim().toLowerCase();
 
-    // Query new lawyer_profiles table first, fallback to legacy lawyers table
+    // Query lawyers table
     let users = [];
-    const { data: newRows } = await supabase
-      .from('lawyer_profiles')
+    const { data: legacyRows } = await supabase
+      .from('lawyers')
       .select('*')
       .or(`email.eq.${id},phone.eq.${identifier.trim()}`);
-    if (newRows?.length) users = newRows;
+    if (legacyRows?.length) users = legacyRows;
 
     if (!users.length) {
       const { data: legacyRows } = await supabase
@@ -241,13 +241,13 @@ const clientLoginHandler = async (req, res) => {
 
     const id = identifier.trim().toLowerCase();
 
-    // Query new client_profiles table first, fallback to legacy clients table
+    // Query clients table
     let users = [];
-    const { data: newRows } = await supabase
-      .from('client_profiles')
+    const { data: legacyRows } = await supabase
+      .from('clients')
       .select('*')
       .or(`email.eq.${id},phone.eq.${identifier.trim()}`);
-    if (newRows?.length) users = newRows;
+    if (legacyRows?.length) users = legacyRows;
 
     if (!users.length) {
       const { data: legacyRows } = await supabase
@@ -289,7 +289,7 @@ app.post('/.netlify/functions/api/auth/login-client', clientLoginHandler);
 app.post('/functions/api/auth/login-client', clientLoginHandler);
 
 // ── Dedicated Client Registration Route ──
-// Inserts into both client_profiles (new) and clients (legacy) tables
+// Inserts directly into the existing public.clients table
 const clientRegisterHandler = async (req, res) => {
   try {
     const { name, email, phone, password } = req.body;
@@ -300,26 +300,20 @@ const clientRegisterHandler = async (req, res) => {
 
     const id = (email || '').trim().toLowerCase();
 
-    // Check duplicates across both tables
-    const { data: existingNew } = await supabase
-      .from('client_profiles')
-      .select('id')
-      .or(`${id ? `email.eq.${id},` : ''}phone.eq.${phone.trim()}`);
+    // Check duplicates across legacy table only since it's the real table
     const { data: existingLegacy } = await supabase
       .from('clients')
       .select('id')
       .or(`${id ? `email.eq.${id},` : ''}phone.eq.${phone.trim()}`);
 
-    if ((existingNew?.length || 0) + (existingLegacy?.length || 0) > 0) {
+    if (existingLegacy?.length > 0) {
       return res.status(409).json({ error: 'An account with this phone or email already exists. Please sign in.' });
     }
 
     const newClient = { name: name.trim(), email: (email || '').trim(), phone: phone.trim(), password: password.trim() };
 
-    // Insert into new client_profiles table
-    const { error: insertErr } = await supabase.from('client_profiles').insert([newClient]);
-    // Also insert into legacy clients table
-    await supabase.from('clients').insert([newClient]);
+    // Insert into existing clients table
+    const { error: insertErr } = await supabase.from('clients').insert([newClient]);
 
     if (insertErr) throw insertErr;
 
@@ -345,6 +339,80 @@ app.post('/api/auth/register-client', clientRegisterHandler);
 app.post('/auth/register-client', clientRegisterHandler);
 app.post('/.netlify/functions/api/auth/register-client', clientRegisterHandler);
 app.post('/functions/api/auth/register-client', clientRegisterHandler);
+
+// ── Advocate Registration Route ──
+// Handles lawyer registration server-side using the existing 'lawyers' table
+const advocateRegisterHandler = async (req, res) => {
+  try {
+    const { name, email, phone, court, bar_no, aor_no, spec, areas, address, password } = req.body;
+
+    if (!name || !email || !phone || !court || !bar_no || !spec || !address || !password) {
+      return res.status(400).json({ error: 'All required fields must be filled.' });
+    }
+    if (!supabase) return res.status(500).json({ error: 'Database not configured on server.' });
+
+    const emailLower = email.trim().toLowerCase();
+    const phoneTrimmed = phone.trim();
+
+    // Check for existing email in lawyers table
+    const { data: emailCheck } = await supabase
+      .from('lawyers')
+      .select('id')
+      .eq('email', emailLower)
+      .maybeSingle();
+
+    if (emailCheck) {
+      return res.status(409).json({ error: 'An advocate account with this email already exists.' });
+    }
+
+    // Check for existing phone in lawyers table
+    const { data: phoneCheck } = await supabase
+      .from('lawyers')
+      .select('id')
+      .eq('phone', phoneTrimmed)
+      .maybeSingle();
+
+    if (phoneCheck) {
+      return res.status(409).json({ error: 'An advocate account with this phone number already exists.' });
+    }
+
+    const areasArray = Array.isArray(areas) ? areas : (areas ? areas.split(',').map(a => a.trim()) : []);
+
+    const payload = {
+      name: name.trim(),
+      email: emailLower,
+      phone: phoneTrimmed,
+      court: court.trim(),
+      bar_no: bar_no.trim(),
+      aor_no: aor_no ? aor_no.trim() : null,
+      spec: spec.trim(),
+      areas: areasArray,
+      address: address.trim(),
+      password: password.trim(),
+      status: 'pending',
+    };
+
+    const { error: insertError } = await supabase.from('lawyers').insert([payload]);
+
+    if (insertError) {
+      console.error('Supabase insert error:', insertError);
+      return res.status(500).json({ error: 'Registration failed: ' + insertError.message });
+    }
+
+    return res.status(201).json({
+      status: 'success',
+      message: 'Application submitted successfully. Pending admin approval.'
+    });
+  } catch (err) {
+    console.error('Advocate Register Error:', err);
+    return res.status(500).json({ error: 'Registration failed. ' + err.message });
+  }
+};
+
+app.post('/api/auth/register-advocate', advocateRegisterHandler);
+app.post('/auth/register-advocate', advocateRegisterHandler);
+app.post('/.netlify/functions/api/auth/register-advocate', advocateRegisterHandler);
+app.post('/functions/api/auth/register-advocate', advocateRegisterHandler);
 
 // Supabase Login Route for Lawyers and Clients (legacy — kept for backwards compat)
 app.post('/api/auth/login-supabase', async (req, res) => {

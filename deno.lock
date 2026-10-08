@@ -23,6 +23,7 @@
         "npm:@zavudev/sdk@0.38",
         "npm:autoprefixer@^10.4.27",
         "npm:axios@^1.15.0",
+        "npm:bcryptjs@^3.0.3",
         "npm:clsx@^2.1.1",
         "npm:cors@^2.8.6",
         "npm:eslint-plugin-react-hooks@^7.0.1",

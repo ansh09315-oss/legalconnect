@@ -15,6 +15,67 @@ const links = {
   Legal: ['Privacy Policy', 'Terms of Service', 'Cookie Policy', 'Disclaimer'],
 };
 
+/* ── JSON-LD Schema for SEO / AEO ── */
+const jsonLd = {
+  '@context': 'https://schema.org',
+  '@graph': [
+    {
+      '@type': 'LegalService',
+      name: 'Legal Connect',
+      description:
+        'Legal Connect is an online platform connecting Indian citizens with verified, bar-council-registered advocates for consultations and full case representation.',
+      url: 'https://legalconnect.in',
+      areaServed: 'IN',
+      serviceType: [
+        'Online Lawyer Consultation',
+        'Legal Advice',
+        'Property Dispute Lawyer',
+        'Criminal Defence Advocate',
+        'Family Law Consultation',
+        'Corporate Legal Services',
+      ],
+      hasOfferCatalog: {
+        '@type': 'OfferCatalog',
+        name: 'Legal Services',
+        itemListElement: [
+          { '@type': 'Offer', itemOffered: { '@type': 'Service', name: 'Find Verified Advocate' } },
+          { '@type': 'Offer', itemOffered: { '@type': 'Service', name: 'Online Legal Consultation' } },
+          { '@type': 'Offer', itemOffered: { '@type': 'Service', name: 'Case Progress Tracking' } },
+        ],
+      },
+    },
+    {
+      '@type': 'FAQPage',
+      mainEntity: [
+        {
+          '@type': 'Question',
+          name: 'How do I hire an advocate online through Legal Connect?',
+          acceptedAnswer: {
+            '@type': 'Answer',
+            text: 'Hiring an advocate on Legal Connect takes three steps: Search our verified directory by case type and location, message your chosen advocate via AdvoTalk chat, and formally engage them with a digital agreement.',
+          },
+        },
+        {
+          '@type': 'Question',
+          name: 'Are the lawyers on Legal Connect verified and licensed?',
+          acceptedAnswer: {
+            '@type': 'Answer',
+            text: 'Yes. Every advocate undergoes a three-layer verification: identity check, State Bar Council enrolment validation, and peer review before listing.',
+          },
+        },
+        {
+          '@type': 'Question',
+          name: 'How do I find a property lawyer near me in India?',
+          acceptedAnswer: {
+            '@type': 'Answer',
+            text: 'Use the search bar on Legal Connect, select Property Law as the practice area, then filter by your city or relevant court to see verified property advocates instantly.',
+          },
+        },
+      ],
+    },
+  ],
+};
+
 const SocialIcon = ({ social, index }) => {
   const Icon = social.icon;
   return (
@@ -36,6 +97,12 @@ const SocialIcon = ({ social, index }) => {
 const ModernFooter = () => {
   return (
     <footer className="border-t border-white/5 bg-[#04080f] pt-16 pb-8">
+      {/* JSON-LD Schema injection point */}
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+      />
+
       <div className="max-w-7xl mx-auto px-6">
         <div className="grid grid-cols-2 md:grid-cols-5 gap-10 mb-14">
           {/* Brand */}

@@ -31,20 +31,34 @@ const ClientRegistration = () => {
 
     setIsSubmitting(true);
     try {
-      // Check duplicate client in Supabase
-      const { data: existing, error: checkErr } = await supabase
-        .from('clients')
-        .select('id, email, phone')
-        .or(`email.eq.${data.email.trim().toLowerCase()},phone.eq.${data.phone.trim()}`);
+      // Check duplicate — safe separate queries (avoids RLS issues with .or())
+      try {
+        const { data: emailCheck } = await supabase
+          .from('clients')
+          .select('id')
+          .eq('email', data.email.trim().toLowerCase())
+          .maybeSingle();
 
-      if (checkErr) {
-        throw new Error('Database check failed. Please try again.');
-      }
+        if (emailCheck) {
+          setError('An account with this email already exists. Please log in.');
+          setIsSubmitting(false);
+          return;
+        }
 
-      if (existing && existing.length > 0) {
-        setError('An account with this email/phone already exists.');
-        setIsSubmitting(false);
-        return;
+        const { data: phoneCheck } = await supabase
+          .from('clients')
+          .select('id')
+          .eq('phone', data.phone.trim())
+          .maybeSingle();
+
+        if (phoneCheck) {
+          setError('An account with this phone number already exists. Please log in.');
+          setIsSubmitting(false);
+          return;
+        }
+      } catch (checkErr) {
+        // Continue if pre-check fails — DB constraints will catch real duplicates
+        console.warn('Duplicate pre-check skipped:', checkErr?.message);
       }
 
       const newClient = {

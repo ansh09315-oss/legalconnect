@@ -1,166 +1,196 @@
 import React from 'react';
-import { motion, useInView } from 'framer-motion';
-import { useRef } from 'react';
-import { FileText, Search, Scale, CheckCircle, Clock, AlertCircle } from 'lucide-react';
+import { motion } from 'framer-motion';
+import { Search, MessageSquare, ShieldCheck, ArrowRight } from 'lucide-react';
 
-const cases = [
+const steps = [
   {
-    id: 'LC-2024-001',
-    title: 'Property Dispute Settlement',
-    type: 'Civil',
-    advocate: 'Priya Mehra',
-    progress: 75,
-    status: 'In Hearing',
-    statusColor: '#00e5ff',
-    steps: [
-      { label: 'Filed', icon: FileText, done: true },
-      { label: 'Review', icon: Search, done: true },
-      { label: 'Hearing', icon: Scale, done: false, active: true },
-      { label: 'Verdict', icon: CheckCircle, done: false },
+    number: '01',
+    icon: Search,
+    title: 'Find Your Advocate',
+    color: '#00e5ff',
+    glow: 'rgba(0,229,255,0.15)',
+    border: 'rgba(0,229,255,0.25)',
+    description:
+      'Browse our directory of verified advocates filtered by specialisation, location, court, experience, and client ratings. Every lawyer is identity-verified before listing.',
+    actions: [
+      'Search by case type (property, criminal, family, corporate)',
+      'Filter by court — High Court, District, Supreme Court',
+      'Compare profiles, fees, and client reviews',
     ],
+    cta: 'Find an Advocate',
+    ctaHref: '#services',
   },
   {
-    id: 'LC-2024-019',
-    title: 'Corporate IP Infringement',
-    type: 'Corporate',
-    advocate: 'Rahul Singh',
-    progress: 40,
-    status: 'Under Review',
-    statusColor: '#818cf8',
-    steps: [
-      { label: 'Filed', icon: FileText, done: true },
-      { label: 'Review', icon: Search, done: false, active: true },
-      { label: 'Hearing', icon: Scale, done: false },
-      { label: 'Verdict', icon: CheckCircle, done: false },
+    number: '02',
+    icon: MessageSquare,
+    title: 'Consult Online',
+    color: '#818cf8',
+    glow: 'rgba(129,140,248,0.15)',
+    border: 'rgba(129,140,248,0.25)',
+    description:
+      'Connect instantly via our encrypted AdvoTalk messaging platform. Share documents, discuss your case in full confidentiality, and get a clear legal opinion before committing.',
+    actions: [
+      'Instant chat with your chosen advocate',
+      'Upload case documents securely',
+      'Receive a clear written legal opinion',
     ],
+    cta: 'Start Consultation',
+    ctaHref: '#advotalk',
   },
   {
-    id: 'LC-2024-033',
-    title: 'Wrongful Termination Claim',
-    type: 'Labour',
-    advocate: 'Sneha Patel',
-    progress: 92,
-    status: 'Near Verdict',
-    statusColor: '#34d399',
-    steps: [
-      { label: 'Filed', icon: FileText, done: true },
-      { label: 'Review', icon: Search, done: true },
-      { label: 'Hearing', icon: Scale, done: true },
-      { label: 'Verdict', icon: CheckCircle, done: false, active: true },
+    number: '03',
+    icon: ShieldCheck,
+    title: 'Hire & Track Progress',
+    color: '#34d399',
+    glow: 'rgba(52,211,153,0.15)',
+    border: 'rgba(52,211,153,0.25)',
+    description:
+      'Once you decide to hire, formalise the engagement on the platform. Your advocate keeps you updated at every case stage — no more chasing calls or wondering what\'s happening.',
+    actions: [
+      'Formal digital engagement agreement',
+      'Real-time case stage updates',
+      'Shared document vault & hearing reminders',
     ],
+    cta: 'Hire an Advocate',
+    ctaHref: '#services',
   },
 ];
 
-const ProgressBar = ({ progress, color }) => {
-  const ref = useRef(null);
-  const isInView = useInView(ref, { once: true });
-
+const HowItWorks = () => {
   return (
-    <div ref={ref} className="w-full h-1.5 bg-white/5 rounded-full overflow-hidden">
-      <motion.div
-        className="h-full rounded-full"
-        style={{ backgroundColor: color }}
-        initial={{ width: 0 }}
-        animate={isInView ? { width: `${progress}%` } : { width: 0 }}
-        transition={{ duration: 1.2, ease: 'easeOut', delay: 0.3 }}
-      />
-    </div>
-  );
-};
-
-const CaseCard = ({ caseItem, index }) => {
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 30 }}
-      whileInView={{ opacity: 1, y: 0 }}
-      viewport={{ once: true }}
-      transition={{ delay: index * 0.15, duration: 0.6 }}
-      className="glass-card p-6 rounded-2xl border border-white/10"
+    <section
+      id="timeline"
+      aria-labelledby="how-it-works-heading"
+      className="py-24 bg-[#04080f]"
     >
-      <div className="flex items-start justify-between mb-5">
-        <div>
-          <p className="text-xs text-slate-500 font-mono mb-1">{caseItem.id}</p>
-          <h3 className="text-white font-semibold text-base leading-tight">{caseItem.title}</h3>
-          <p className="text-slate-400 text-sm mt-1">Advocate: {caseItem.advocate}</p>
-        </div>
-        <span
-          className="text-xs font-semibold px-3 py-1.5 rounded-full flex-shrink-0"
-          style={{
-            background: `${caseItem.statusColor}1A`,
-            color: caseItem.statusColor,
-            border: `1px solid ${caseItem.statusColor}33`,
-          }}
-        >
-          {caseItem.status}
-        </span>
-      </div>
-
-      {/* Step Tracker */}
-      <div className="flex items-center gap-2 mb-5">
-        {caseItem.steps.map((step, i) => {
-          const Icon = step.icon;
-          return (
-            <React.Fragment key={i}>
-              <div className="flex flex-col items-center gap-1">
-                <motion.div
-                  className="w-8 h-8 rounded-full flex items-center justify-center"
-                  style={{
-                    background: step.done
-                      ? caseItem.statusColor + '33'
-                      : step.active
-                      ? caseItem.statusColor + '1A'
-                      : 'rgba(255,255,255,0.04)',
-                    border: `1px solid ${step.done || step.active ? caseItem.statusColor + '80' : 'rgba(255,255,255,0.08)'}`,
-                  }}
-                  animate={step.active ? { boxShadow: [`0 0 0px ${caseItem.statusColor}`, `0 0 10px ${caseItem.statusColor}80`, `0 0 0px ${caseItem.statusColor}`] } : {}}
-                  transition={step.active ? { duration: 2, repeat: Infinity } : {}}
-                >
-                  <Icon size={14} style={{ color: step.done || step.active ? caseItem.statusColor : '#475569' }} />
-                </motion.div>
-                <span className="text-xs text-slate-500">{step.label}</span>
-              </div>
-              {i < caseItem.steps.length - 1 && (
-                <div className="flex-1 h-px mb-4" style={{ background: step.done ? caseItem.statusColor + '60' : 'rgba(255,255,255,0.06)' }} />
-              )}
-            </React.Fragment>
-          );
-        })}
-      </div>
-
-      {/* Progress Bar */}
-      <div className="flex items-center gap-3">
-        <ProgressBar progress={caseItem.progress} color={caseItem.statusColor} />
-        <span className="text-xs font-semibold" style={{ color: caseItem.statusColor }}>
-          {caseItem.progress}%
-        </span>
-      </div>
-    </motion.div>
-  );
-};
-
-const CaseTimeline = () => {
-  return (
-    <section id="timeline" className="py-24 bg-[#04080f]">
       <div className="max-w-7xl mx-auto px-6">
+        {/* Section Header */}
         <motion.div
           initial={{ opacity: 0, y: 30 }}
           whileInView={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.7 }}
           viewport={{ once: true }}
-          className="mb-12"
+          className="text-center mb-16"
         >
-          <span className="text-legal-cyan text-sm font-semibold tracking-[0.3em] uppercase">Real-Time Updates</span>
-          <h2 className="text-4xl md:text-5xl font-display font-bold text-white mt-2">
-            Live Case Timeline
+          <span className="text-legal-cyan text-sm font-semibold tracking-[0.3em] uppercase">
+            Simple 3-Step Process
+          </span>
+          <h2
+            id="how-it-works-heading"
+            className="text-4xl md:text-5xl font-display font-bold text-white mt-3 mb-4"
+          >
+            How It Works
           </h2>
-          <p className="text-slate-400 mt-3 max-w-lg">
-            Track your ongoing cases with granular, real-time stage updates.
+          <p className="text-slate-400 text-base max-w-xl mx-auto leading-relaxed">
+            From finding the right advocate to hiring and tracking your case —
+            everything happens on one secure platform in minutes.
           </p>
         </motion.div>
 
-        <div className="grid md:grid-cols-3 gap-6">
-          {cases.map((c, i) => (
-            <CaseCard key={c.id} caseItem={c} index={i} />
+        {/* 3 Step Cards */}
+        <div className="grid md:grid-cols-3 gap-6 lg:gap-8">
+          {steps.map((step, index) => {
+            const Icon = step.icon;
+            return (
+              <motion.article
+                key={step.number}
+                initial={{ opacity: 0, y: 40 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }}
+                transition={{ delay: index * 0.15, duration: 0.6 }}
+                className="relative group flex flex-col rounded-2xl p-7 border transition-all duration-300"
+                style={{
+                  background: `linear-gradient(145deg, rgba(255,255,255,0.03) 0%, rgba(255,255,255,0.01) 100%)`,
+                  borderColor: step.border,
+                  boxShadow: `0 0 0 0 ${step.glow}`,
+                }}
+                onMouseEnter={e => {
+                  e.currentTarget.style.boxShadow = `0 20px 60px ${step.glow}`;
+                  e.currentTarget.style.borderColor = step.color + '60';
+                }}
+                onMouseLeave={e => {
+                  e.currentTarget.style.boxShadow = `0 0 0 0 ${step.glow}`;
+                  e.currentTarget.style.borderColor = step.border;
+                }}
+              >
+                {/* Step Number */}
+                <span
+                  className="absolute top-6 right-7 text-6xl font-black font-display select-none pointer-events-none"
+                  style={{ color: step.color, opacity: 0.07 }}
+                >
+                  {step.number}
+                </span>
+
+                {/* Icon */}
+                <div
+                  className="w-14 h-14 rounded-2xl flex items-center justify-center mb-5 flex-shrink-0"
+                  style={{
+                    background: step.glow,
+                    border: `1px solid ${step.border}`,
+                  }}
+                >
+                  <Icon size={26} style={{ color: step.color }} />
+                </div>
+
+                {/* Step Badge */}
+                <span
+                  className="text-xs font-bold tracking-widest uppercase mb-2"
+                  style={{ color: step.color }}
+                >
+                  Step {step.number}
+                </span>
+
+                {/* Title */}
+                <h3 className="text-xl font-display font-bold text-white mb-3">
+                  {step.title}
+                </h3>
+
+                {/* Description */}
+                <p className="text-slate-400 text-sm leading-relaxed mb-5">
+                  {step.description}
+                </p>
+
+                {/* Action List */}
+                <ul className="space-y-2 mb-6 flex-1">
+                  {step.actions.map((action, i) => (
+                    <li key={i} className="flex items-start gap-2.5 text-sm text-slate-400">
+                      <span
+                        className="mt-1.5 w-1.5 h-1.5 rounded-full flex-shrink-0"
+                        style={{ background: step.color }}
+                      />
+                      {action}
+                    </li>
+                  ))}
+                </ul>
+
+                {/* CTA */}
+                <a
+                  href={step.ctaHref}
+                  onClick={e => {
+                    e.preventDefault();
+                    document.getElementById(step.ctaHref.replace('#', ''))?.scrollIntoView({ behavior: 'smooth' });
+                  }}
+                  className="inline-flex items-center gap-2 text-sm font-semibold transition-all duration-200 group/btn"
+                  style={{ color: step.color }}
+                >
+                  {step.cta}
+                  <ArrowRight
+                    size={15}
+                    className="transition-transform duration-200 group-hover/btn:translate-x-1"
+                  />
+                </a>
+              </motion.article>
+            );
+          })}
+        </div>
+
+        {/* Connector line decoration on large screens */}
+        <div className="hidden md:flex items-center justify-center mt-4 gap-0 pointer-events-none select-none" aria-hidden="true">
+          {[0, 1].map(i => (
+            <div key={i} className="flex items-center" style={{ width: '33.33%' }}>
+              <div className="flex-1 h-px bg-gradient-to-r from-transparent via-white/10 to-transparent" />
+              <ArrowRight size={14} className="text-white/10 flex-shrink-0" />
+            </div>
           ))}
         </div>
       </div>
@@ -168,4 +198,4 @@ const CaseTimeline = () => {
   );
 };
 
-export default CaseTimeline;
+export default HowItWorks;

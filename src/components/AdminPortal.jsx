@@ -84,10 +84,10 @@ const AdminPortal = () => {
         { data: l },
         { data: cl }
       ] = await Promise.all([
-        supabase.from('lawyer_profiles').select('*').eq('status', 'pending').order('created_at', { ascending: false }),
+        supabase.from('lawyers').select('*').eq('status', 'pending').order('created_at', { ascending: false }),
         supabase.from('cases').select('*').order('created_at', { ascending: false }),
-        supabase.from('lawyer_profiles').select('*').eq('status', 'approved').order('created_at', { ascending: false }),
-        supabase.from('client_profiles').select('*').order('created_at', { ascending: false }),
+        supabase.from('lawyers').select('*').eq('status', 'approved').order('created_at', { ascending: false }),
+        supabase.from('clients').select('*').order('created_at', { ascending: false }),
       ]);
 
       if (p) setPending(p);
@@ -104,15 +104,8 @@ const AdminPortal = () => {
 
   const updateStatus = async (id, status) => {
     try {
-      const { error } = await supabase.from('lawyer_profiles').update({ status }).eq('id', id);
+      const { error } = await supabase.from('lawyers').update({ status }).eq('id', id);
       if (error) throw error;
-
-      // Sync status to legacy lawyers table for compatibility
-      try {
-        await supabase.from('lawyers').update({ status }).eq('id', id);
-      } catch (e) {
-        console.warn('Legacy sync status error:', e);
-      }
       
       // Move to correct state lists
       if (status === 'approved') {
@@ -134,16 +127,9 @@ const AdminPortal = () => {
         const { error: casesErr } = await supabase.from('cases').delete().eq('lawyer_id', id);
         if (casesErr) throw casesErr;
 
-        // 2. Delete the lawyer from lawyer_profiles
-        const { error: lawyerErr } = await supabase.from('lawyer_profiles').delete().eq('id', id);
+        // 2. Delete the lawyer from lawyers table
+        const { error: lawyerErr } = await supabase.from('lawyers').delete().eq('id', id);
         if (lawyerErr) throw lawyerErr;
-
-        // 3. Delete from legacy table
-        try {
-          await supabase.from('lawyers').delete().eq('id', id);
-        } catch (e) {
-          console.warn('Legacy sync delete error:', e);
-        }
 
         setLawyers(prev => prev.filter(l => l.id !== id));
         if (expandedLawyerId === id) setExpandedLawyerId(null);
